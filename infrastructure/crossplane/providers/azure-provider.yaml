@@ -1,0 +1,35 @@
+# =============================================================================
+# Crossplane Azure Provider
+# =============================================================================
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure
+  annotations:
+    crossplane.io/description: "Azure provider for AuroraForge cloud-agnostic resources"
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure:v0.42.0
+  packagePullPolicy: IfNotPresent
+  revisionActivationPolicy: Automatic
+  revisionHistoryLimit: 3
+  controllerConfigRef:
+    name: azure-provider-controller-config
+
+---
+apiVersion: pkg.crossplane.io/v1alpha1
+kind: ControllerConfig
+metadata:
+  name: azure-provider-controller-config
+spec:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector:
+    role: system
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists

@@ -1,0 +1,44 @@
+# =============================================================================
+# Database Claim – Primary AuroraForge operational database
+#
+# Apply to AWS cluster:
+#   kubectl apply -f infrastructure/crossplane/claims/primary-database-claim.yaml
+#
+# To target Azure instead, change:
+#   compositionSelector.matchLabels.cloud: azure
+#   parameters.engine: cosmos-nosql
+# =============================================================================
+apiVersion: platform.auroraforge.io/v1alpha1
+kind: Database
+metadata:
+  name: auroraforge-primary-db
+  namespace: auroraforge
+  labels:
+    app: auroraforge
+    tier: primary
+  annotations:
+    crossplane.io/description: "Primary operational database for AuroraForge"
+spec:
+  compositionSelector:
+    matchLabels:
+      cloud: aws           # Switch to 'azure' to provision Cosmos DB instead
+      engine: postgresql
+
+  parameters:
+    engine: postgresql
+    engineVersion: "16.1"
+    storageGb: 100
+    environmentType: prod
+    region: us-east-1
+    multiRegion: true
+    backupRetentionDays: 30
+    deletionProtection: true
+    tags:
+      DataClassification: restricted
+      CostCenter: platform
+      Team: data-platform
+
+  # Crossplane publishes connection details to this secret
+  writeConnectionSecretToRef:
+    name: auroraforge-primary-db-conn
+    namespace: auroraforge

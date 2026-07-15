@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        AuroraForge Key Management Service — Logback configuration.
+        Key-management operations are high-sensitivity: all INFO+ logs are
+        directed to the structured JSON appender in every non-dev profile so
+        key-rotation and access events are available for SIEM ingestion.
+        The AUDIT logger (configured in logback-base.xml) writes to audit.log
+        separately and is always at INFO regardless of profile.
+    -->
+
+    <springProperty name="SERVICE_NAME"    source="spring.application.name"    defaultValue="auroraforge-keymgmt"/>
+    <springProperty name="SERVICE_VERSION" source="spring.application.version"  defaultValue="1.0.0-SNAPSHOT"/>
+
+    <property name="SERVICE" value="${SERVICE_NAME}"/>
+    <property name="VERSION" value="${SERVICE_VERSION}"/>
+
+    <include resource="logback-base.xml"/>
+
+    <!-- AWS KMS / Azure Key Vault SDK noise suppression -->
+    <logger name="software.amazon.awssdk.services.kms"  level="WARN"/>
+    <logger name="com.azure.security.keyvault"          level="WARN"/>
+
+    <springProfile name="dev">
+        <logger name="io.auroraforge.keymgmt" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod,staging">
+        <logger name="io.auroraforge.keymgmt" level="INFO"/>
+    </springProfile>
+
+</configuration>

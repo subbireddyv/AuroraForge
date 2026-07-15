@@ -1,0 +1,23 @@
+# AuroraForge – Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback — platform team reviews everything
+*                                         @your-org/platform-team
+
+# Domain core — principal engineer sign-off required
+services/auroraforge-core/               @your-org/principal-engineers
+
+# Security-sensitive modules
+services/auroraforge-auth/               @your-org/security-team @your-org/platform-team
+services/auroraforge-keymgmt/            @your-org/security-team @your-org/platform-team
+
+# Infrastructure as Code
+infrastructure/                          @your-org/infra-team
+k8s/                                     @your-org/infra-team
+.github/                                 @your-org/platform-team
+
+# CI pipeline changes
+.github/workflows/                       @your-org/platform-team @your-org/security-team
+
+# Avro schemas — schema evolution must be reviewed carefully
+services/auroraforge-avro/               @your-org/data-platform-team @your-org/principal-engineers

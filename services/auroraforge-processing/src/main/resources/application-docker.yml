@@ -1,0 +1,28 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+  kafka:
+    bootstrap-servers: kafka-1:9092,kafka-2:9093,kafka-3:9094
+    streams:
+      bootstrap-servers: kafka-1:9092,kafka-2:9093,kafka-3:9094
+
+auroraforge:
+  cloud:
+    provider: LOCAL
+  spark:
+    master: spark://spark-master:7077
+    app-name: auroraforge-processing-local
+    deploy-mode: client
+    jars:
+      - /app/libs/auroraforge-processing.jar
+    config:
+      spark.sql.shuffle.partitions: "4"
+      spark.executor.memory: "512m"
+      spark.executor.cores: "1"
+
+logging:
+  level:
+    io.auroraforge: DEBUG
+    org.apache.spark: WARN
+    org.apache.kafka: WARN

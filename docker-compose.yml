@@ -1,0 +1,614 @@
+# =============================================================================
+# AuroraForge – Local Development Stack
+#
+# Includes: Kafka (3-broker cluster), Schema Registry, Kafka Connect + Debezium,
+#           Kafka UI, Spark (master + 2 workers), PostgreSQL, Redis (Sentinel),
+#           MinIO (S3-compatible), Vault (secrets), OpenTelemetry Collector,
+#           Prometheus, Grafana, Jaeger.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose ps        # verify health
+# =============================================================================
+
+name: auroraforge
+
+x-kafka-common: &kafka-common
+  image: confluentinc/cp-kafka:7.6.1
+  restart: unless-stopped
+  depends_on:
+    zookeeper:
+      condition: service_healthy
+  environment:
+    KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    KAFKA_DEFAULT_REPLICATION_FACTOR: "3"
+    KAFKA_MIN_INSYNC_REPLICAS: "2"
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    KAFKA_DELETE_TOPIC_ENABLE: "true"
+    KAFKA_LOG_RETENTION_HOURS: "168"
+    KAFKA_LOG_SEGMENT_BYTES: "1073741824"
+    KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: "300000"
+    KAFKA_COMPRESSION_TYPE: "lz4"
+    KAFKA_MESSAGE_MAX_BYTES: "10485760"
+    KAFKA_JMX_PORT: "9999"
+    KAFKA_JMX_HOSTNAME: localhost
+    KAFKA_HEAP_OPTS: "-Xmx1G -Xms512m"
+  healthcheck:
+    test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 60s
+
+x-spark-common: &spark-common
+  image: bitnami/spark:3.5.1
+  restart: unless-stopped
+  environment:
+    SPARK_MODE: worker
+    SPARK_MASTER_URL: spark://spark-master:7077
+    SPARK_WORKER_MEMORY: 1G
+    SPARK_WORKER_CORES: "2"
+    SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+    SPARK_RPC_ENCRYPTION_ENABLED: "no"
+    SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+    SPARK_SSL_ENABLED: "no"
+  depends_on:
+    spark-master:
+      condition: service_healthy
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # ZOOKEEPER
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    hostname: zookeeper
+    container_name: auroraforge-zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 100
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # KAFKA BROKERS (3-node cluster)
+  # ---------------------------------------------------------------------------
+  kafka-1:
+    <<: *kafka-common
+    hostname: kafka-1
+    container_name: auroraforge-kafka-1
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      <<: *kafka-common
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-1:9092,PLAINTEXT_HOST://localhost:29092"
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+    networks:
+      - auroraforge-net
+
+  kafka-2:
+    <<: *kafka-common
+    hostname: kafka-2
+    container_name: auroraforge-kafka-2
+    ports:
+      - "9093:9093"
+      - "29093:29093"
+    environment:
+      <<: *kafka-common
+      KAFKA_BROKER_ID: 2
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-2:9093,PLAINTEXT_HOST://localhost:29093"
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+    networks:
+      - auroraforge-net
+
+  kafka-3:
+    <<: *kafka-common
+    hostname: kafka-3
+    container_name: auroraforge-kafka-3
+    ports:
+      - "9094:9094"
+      - "29094:29094"
+    environment:
+      <<: *kafka-common
+      KAFKA_BROKER_ID: 3
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9094,PLAINTEXT_HOST://0.0.0.0:29094"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-3:9094,PLAINTEXT_HOST://localhost:29094"
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # SCHEMA REGISTRY
+  # ---------------------------------------------------------------------------
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    hostname: schema-registry
+    container_name: auroraforge-schema-registry
+    restart: unless-stopped
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka-1:9092,kafka-2:9093,kafka-3:9094"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: "3"
+      # Enforce backward transitive compatibility for safe schema evolution
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: BACKWARD_TRANSITIVE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # KAFKA CONNECT + DEBEZIUM (CDC)
+  # ---------------------------------------------------------------------------
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:7.6.1
+    hostname: kafka-connect
+    container_name: auroraforge-kafka-connect
+    restart: unless-stopped
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka-1:9092,kafka-2:9093,kafka-3:9094"
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_GROUP_ID: "auroraforge-connect-cluster"
+      CONNECT_CONFIG_STORAGE_TOPIC: "_connect-configs"
+      CONNECT_OFFSET_STORAGE_TOPIC: "_connect-offsets"
+      CONNECT_STATUS_STORAGE_TOPIC: "_connect-status"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "3"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "3"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "3"
+      CONNECT_KEY_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      CONNECT_VALUE_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      # Install Debezium PostgreSQL connector at startup
+      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
+    command:
+      - bash
+      - -c
+      - |
+        confluent-hub install --no-prompt debezium/debezium-connector-postgresql:2.5.0 &&
+        /etc/confluent/docker/run
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # KAFKA UI
+  # ---------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: auroraforge-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka-1:9092,kafka-2:9093,kafka-3:9094"
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: "http://schema-registry:8081"
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: "http://kafka-connect:8083"
+      DYNAMIC_CONFIG_ENABLED: "true"
+      AUTH_TYPE: "disabled"
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # APACHE SPARK CLUSTER
+  # ---------------------------------------------------------------------------
+  spark-master:
+    image: bitnami/spark:3.5.1
+    hostname: spark-master
+    container_name: auroraforge-spark-master
+    restart: unless-stopped
+    ports:
+      - "8088:8080"   # Spark UI (remapped to avoid conflict with Kafka UI)
+      - "7077:7077"   # Spark master port
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      SPARK_MASTER_OPTS: "-Dspark.deploy.defaultCores=2"
+    volumes:
+      - spark-logs:/opt/bitnami/spark/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - auroraforge-net
+
+  spark-worker-1:
+    <<: *spark-common
+    hostname: spark-worker-1
+    container_name: auroraforge-spark-worker-1
+    ports:
+      - "8089:8081"
+    environment:
+      <<: *spark-common
+      SPARK_WORKER_MEMORY: 1G
+    networks:
+      - auroraforge-net
+
+  spark-worker-2:
+    <<: *spark-common
+    hostname: spark-worker-2
+    container_name: auroraforge-spark-worker-2
+    ports:
+      - "8090:8081"
+    environment:
+      <<: *spark-common
+      SPARK_WORKER_MEMORY: 1G
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # POSTGRESQL (primary source-of-truth + CDC source)
+  # ---------------------------------------------------------------------------
+  postgresql:
+    image: postgres:16.2
+    hostname: postgresql
+    container_name: auroraforge-postgresql
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: auroraforge
+      POSTGRES_USER: auroraforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auroraforge_dev_secret}
+      # Enable logical replication for Debezium CDC
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=all"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "log_min_duration_statement=500"
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+      - ./config/postgresql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auroraforge -d auroraforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # REDIS (primary) + SENTINEL for HA
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7.2.4
+    hostname: redis
+    container_name: auroraforge-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-redis_dev_secret}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_dev_secret}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  redis-sentinel:
+    image: redis:7.2.4
+    hostname: redis-sentinel
+    container_name: auroraforge-redis-sentinel
+    restart: unless-stopped
+    ports:
+      - "26379:26379"
+    command: >
+      redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./config/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # MINIO (S3-compatible local object storage)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-03-15T01-07-19Z
+    hostname: minio
+    container_name: auroraforge-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secret}
+      MINIO_SITE_NAME: auroraforge-local
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auroraforge-net
+
+  # MinIO bucket initialization (runs once then exits)
+  minio-init:
+    image: minio/mc:RELEASE.2024-03-13T23-51-57Z
+    container_name: auroraforge-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin_secret &&
+      mc mb --ignore-existing local/auroraforge-raw &&
+      mc mb --ignore-existing local/auroraforge-processed &&
+      mc mb --ignore-existing local/auroraforge-archive &&
+      mc mb --ignore-existing local/spark-checkpoints &&
+      mc version enable local/auroraforge-raw &&
+      echo 'MinIO buckets initialized.'
+      "
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # HASHICORP VAULT (local secret management / KMS simulation)
+  # ---------------------------------------------------------------------------
+  vault:
+    image: hashicorp/vault:1.16.0
+    hostname: vault
+    container_name: auroraforge-vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-auroraforge-dev}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    command: server -dev
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # OPENTELEMETRY COLLECTOR
+  # Fan-out: receives OTLP → exports to Prometheus, Jaeger, (cloud exporters in prod)
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.98.0
+    hostname: otel-collector
+    container_name: auroraforge-otel-collector
+    restart: unless-stopped
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics (collector self-monitoring)
+      - "8889:8889"   # Prometheus exporter endpoint (scraped by Prometheus)
+      - "13133:13133" # Health check endpoint
+    volumes:
+      - ./config/otel/otel-collector.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      - jaeger
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    hostname: prometheus
+    container_name: auroraforge-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # GRAFANA
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.2
+    hostname: grafana
+    container_name: auroraforge-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: "grafana-piechart-panel,grafana-worldmap-panel"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+  # ---------------------------------------------------------------------------
+  # JAEGER (distributed tracing backend)
+  # ---------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    hostname: jaeger
+    container_name: auroraforge-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger HTTP collector
+      - "14250:14250"  # Jaeger gRPC collector
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
+    volumes:
+      - jaeger-data:/badger
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auroraforge-net
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  auroraforge-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  postgresql-data:
+  redis-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+  jaeger-data:
+  spark-logs:

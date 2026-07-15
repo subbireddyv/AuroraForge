@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: auroraforge-sync
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9093,kafka-3:9094}
+    consumer:
+      group-id: auroraforge-sync-consumer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed    # Only read committed (EOS-safe)
+      max-poll-records: 100
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+  datasource:
+    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5432/auroraforge}
+    username: ${DATASOURCE_USER:auroraforge}
+    password: ${DATASOURCE_PASSWORD:changeme}
+    hikari:
+      maximum-pool-size: 10
+      pool-name: sync-pool
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        "[jdbc.batch_size]": 50
+        "[order_inserts]": true
+        "[order_updates]": true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: ${SERVER_PORT:8083}
+  shutdown: graceful
+
+management:
+  server:
+    port: 8093
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      service: auroraforge-sync
+
+auroraforge:
+  auth:
+    server:
+      enabled: false   # sync service is a resource server only; auth endpoints are suppressed
+  kafka:
+    topic-prefix: auroraforge.events
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    s3:
+      processed-bucket: ${AWS_S3_PROCESSED_BUCKET:auroraforge-processed}
+  azure:
+    cosmos:
+      endpoint: ${COSMOS_DB_ENDPOINT:https://auroraforge-cosmos.documents.azure.com:443/}
+      database: auroraforge
+      container: aggregates
+  dr:
+    primary-cloud: aws
+    health-check-interval-seconds: 30
+    degraded-threshold-seconds: 60
+    rpo-threshold-seconds: 300          # 5-minute RPO SLA
+    consistency-check-sample-size: 100
+    dlq:
+      max-retry-attempts: 5
+      retry-backoff-seconds: 30
+      retry-interval-seconds: 60
+    strategy-by-aggregate-type:
+      TENANT_CONFIG:   CLOUD_PRIORITY   # authoritative config from primary cloud only
+      AUDIT_RECORD:    LAST_WRITE_WINS  # audit records are immutable; LWW is safe
+      RESTRICTED_DATA: MANUAL_REVIEW    # compliance-gated; requires human sign-off
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      aws-sync:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 20
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      azure-sync:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 20
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+  bulkhead:
+    instances:
+      aws-sync:
+        max-concurrent-calls: 20
+        max-wait-duration: 0
+      azure-sync:
+        max-concurrent-calls: 20
+        max-wait-duration: 0
+  retry:
+    instances:
+      aws-sync:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+      azure-sync:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+
+logging:
+  level:
+    io.auroraforge: INFO
+    com.azure.cosmos: WARN
+    software.amazon.awssdk: WARN

@@ -1,0 +1,50 @@
+# =============================================================================
+# Grafana Provisioned Datasources
+# Automatically loaded at startup via the provisioning volume mount.
+# =============================================================================
+apiVersion: 1
+
+datasources:
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: prometheus-ds
+    jsonData:
+      httpMethod: POST
+      prometheusType: Prometheus
+      prometheusVersion: "2.51.2"
+      exemplarTraceIdDestinations:
+        - name: traceId
+          datasourceUid: jaeger-ds
+
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    uid: jaeger-ds
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki-ds
+        tags:
+          - { key: service.name, value: service }
+      nodeGraph:
+        enabled: true
+      traceQuery:
+        timeShiftEnabled: true
+        liveStreaming: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: loki-ds
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger-ds
+          matcherRegex: '"traceId":"(\w+)"'
+          name: TraceId
+          url: "$${__value.raw}"

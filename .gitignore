@@ -1,0 +1,70 @@
+# ─── Maven ────────────────────────────────────────────────────────────────────
+target/
+**/target/
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+**/target/generated-sources/avro/    # avro-maven-plugin output — build artefact
+
+# ─── Java ─────────────────────────────────────────────────────────────────────
+*.class
+*.log
+hs_err_pid*
+
+# ─── Terraform ────────────────────────────────────────────────────────────────
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+*.auto.tfvars
+infrastructure/terraform/aws/terraform.tfvars
+infrastructure/terraform/azure/terraform.tfvars
+!*.tfvars.example
+
+# ─── Secrets / Credentials ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+vault-token
+.vault-token
+infrastructure/crossplane/providers/*-credentials.yaml
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Kubernetes ───────────────────────────────────────────────────────────────
+kubeconfig
+*.kubeconfig
+k8s/**/secret-*.yaml
+k8s/**/secrets/
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.code-workspace
+*.swp
+*.suo
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ─── Test / Spark outputs ─────────────────────────────────────────────────────
+**/surefire-reports/
+**/failsafe-reports/
+derby.log
+metastore_db/
+spark-warehouse/
+**/checkpoint/

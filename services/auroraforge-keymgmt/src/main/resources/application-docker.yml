@@ -1,0 +1,37 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  # PostgreSQL inside docker-compose (service name: postgresql)
+  datasource:
+    url:      jdbc:postgresql://postgresql:5432/auroraforge
+    username: auroraforge
+    password: ${POSTGRES_PASSWORD:auroraforge}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle:      2
+      connection-timeout: 5000
+
+  flyway:
+    enabled: true
+
+auroraforge:
+  cloud:
+    provider: LOCAL
+
+  local:
+    vault:
+      address:      http://vault:8200
+      token:        ${VAULT_DEV_ROOT_TOKEN_ID:root}
+      transit-path: transit
+      transit-key:  auroraforge-app-key
+
+  keymgmt:
+    rotation:
+      enabled: false    # disable scheduled rotation in docker-compose (no real CMK)
+
+logging:
+  level:
+    io.auroraforge: DEBUG
+    org.hibernate.SQL: DEBUG

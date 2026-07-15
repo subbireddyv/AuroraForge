@@ -1,0 +1,184 @@
+groups:
+
+  # ── Disaster Recovery ──────────────────────────────────────────────────────
+  - name: auroraforge.dr
+    rules:
+      - alert: AuroraForgeDRNotHealthy
+        expr: auroraforge_dr_state > 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "AuroraForge DR state is not HEALTHY (state={{ $value }})"
+          description: |
+            DR state machine has been in a non-HEALTHY state for more than 2 minutes.
+            0=HEALTHY 1=DEGRADED 2=FAILOVER_INITIATED 3=FAILOVER_ACTIVE 4=RECOVERING
+            Run: GET /api/v1/dr/status for current cloud health details.
+
+      - alert: AuroraForgeReplicationLagHigh
+        expr: auroraforge_replication_lag_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Replication lag > 60s for cloud={{ $labels.cloud }}"
+          description: |
+            Cross-cloud replication lag has exceeded 60 seconds on {{ $labels.cloud }}.
+            Current: {{ $value }}s. RPO threshold: 300s.
+
+      - alert: AuroraForgeRPOBreach
+        expr: auroraforge_replication_lag_seconds > 300
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "RPO BREACH — replication lag {{ $value }}s on cloud={{ $labels.cloud }}"
+          description: |
+            Replication lag has exceeded the 300s RPO threshold on {{ $labels.cloud }}.
+            Initiate manual failover review: POST /api/v1/dr/failover/{targetCloud}
+
+      - alert: AuroraForgeDLQRecordsExhausted
+        expr: auroraforge_dlq_exhausted_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $value }} DLQ records exhausted max retries"
+          description: |
+            DLQ records have reached max retry attempts and require manual resolution.
+            Run: GET /api/v1/dr/dlq/{tenantId} to inspect.
+            Resolve: POST /api/v1/dr/dlq/{tenantId}/resolve
+
+  # ── Circuit Breakers ───────────────────────────────────────────────────────
+  - name: auroraforge.resilience
+    rules:
+      - alert: AuroraForgeCircuitBreakerOpen
+        expr: |
+          resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is OPEN"
+          description: |
+            The {{ $labels.name }} circuit breaker has been OPEN for more than 1 minute.
+            Check the downstream dependency for errors.
+
+      - alert: AuroraForgeBulkheadSaturation
+        expr: |
+          resilience4j_bulkhead_available_concurrent_calls /
+          resilience4j_bulkhead_max_allowed_concurrent_calls < 0.1
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Bulkhead {{ $labels.name }} is {{ $value | humanizePercentage }} available"
+          description: |
+            The {{ $labels.name }} thread-pool bulkhead has fewer than 10% slots available.
+            New calls are being rejected. Check for slow downstream responses.
+
+  # ── Ingestion ──────────────────────────────────────────────────────────────
+  - name: auroraforge.ingestion
+    rules:
+      - alert: AuroraForgeIngestionErrorRateHigh
+        expr: |
+          rate(http_server_requests_seconds_count{
+            job="auroraforge-ingestion",
+            status=~"5..",
+            uri="/api/v1/tenants/*/events"
+          }[5m]) /
+          rate(http_server_requests_seconds_count{
+            job="auroraforge-ingestion",
+            uri="/api/v1/tenants/*/events"
+          }[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Ingestion error rate > 1% ({{ $value | humanizePercentage }})"
+          description: |
+            More than 1% of ingestion requests are returning 5xx over the last 5 minutes.
+
+      - alert: AuroraForgeIngestionP99High
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_server_requests_seconds_bucket{
+              job="auroraforge-ingestion",
+              uri="/api/v1/tenants/*/events"
+            }[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Ingestion p99 latency > 2s ({{ $value }}s)"
+          description: |
+            99th-percentile ingestion latency has exceeded 2 seconds over the last 5 minutes.
+
+      - alert: AuroraForgeSagaFailureRateHigh
+        expr: |
+          rate(auroraforge_saga_step_failure_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Saga failure rate {{ $value | humanize }}/s across all steps"
+          description: |
+            The data ingestion saga is failing at > 0.05/s. Check step={{ $labels.step }}.
+
+  # ── Kafka Consumer Lag ─────────────────────────────────────────────────────
+  - name: auroraforge.kafka
+    rules:
+      - alert: AuroraForgeConsumerLagHigh
+        expr: |
+          kafka_consumer_group_lag{
+            consumergroup=~"auroraforge-.*"
+          } > 10000
+        for: 10m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Consumer group {{ $labels.consumergroup }} lag > 10k on {{ $labels.topic }}"
+          description: |
+            Kafka consumer lag has been above 10,000 for more than 10 minutes.
+            This may indicate a processing bottleneck or consumer crash.
+
+  # ── JVM ───────────────────────────────────────────────────────────────────
+  - name: auroraforge.jvm
+    rules:
+      - alert: AuroraForgeJvmHeapHigh
+        expr: |
+          jvm_memory_used_bytes{area="heap"} /
+          jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "JVM heap > 85% on {{ $labels.job }} ({{ $labels.instance }})"
+          description: |
+            Heap usage has been above 85% for 5 minutes. Possible memory leak.
+            Capture: GET /actuator/heapdump
+
+      - alert: AuroraForgeJvmGcTimeHigh
+        expr: |
+          rate(jvm_gc_pause_seconds_sum[5m]) /
+          rate(jvm_gc_pause_seconds_count[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "GC pause avg > 100ms on {{ $labels.job }}"
+          description: |
+            Average GC pause time has exceeded 100ms over the last 5 minutes.

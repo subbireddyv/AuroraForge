@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        AuroraForge Ingestion Service — Logback configuration.
+        High-throughput event ingestion path: async JSON appender is the default
+        in all non-dev profiles to minimise latency impact from logging I/O.
+    -->
+
+    <springProperty name="SERVICE_NAME"    source="spring.application.name"    defaultValue="auroraforge-ingestion"/>
+    <springProperty name="SERVICE_VERSION" source="spring.application.version"  defaultValue="1.0.0-SNAPSHOT"/>
+
+    <property name="SERVICE" value="${SERVICE_NAME}"/>
+    <property name="VERSION" value="${SERVICE_VERSION}"/>
+
+    <include resource="logback-base.xml"/>
+
+    <!--
+        Kafka consumer / producer noise suppression.
+        At INFO the Kafka client logs a heartbeat line every 3 seconds per topic
+        partition — suppress to WARN to keep ingestion logs actionable.
+    -->
+    <logger name="org.apache.kafka.clients.consumer" level="WARN"/>
+    <logger name="org.apache.kafka.clients.producer" level="WARN"/>
+    <logger name="org.springframework.kafka.listener" level="INFO"/>
+
+    <springProfile name="dev">
+        <logger name="io.auroraforge.ingestion" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod,staging">
+        <logger name="io.auroraforge.ingestion" level="INFO"/>
+    </springProfile>
+
+</configuration>

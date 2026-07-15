@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: auroraforge-auth
+
+  # ── JPA ──────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto:         validate   # Flyway owns the schema; Hibernate only validates
+    open-in-view:       false
+    properties:
+      hibernate:
+        dialect:        org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone:    UTC
+        format_sql:     false
+
+  # ── Flyway ───────────────────────────────────────────────────────────────
+  flyway:
+    enabled:            true
+    locations:          classpath:db/migration
+    table:              flyway_schema_history_auth   # separate from ingestion module
+    baseline-on-migrate: false
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host:       ${REDIS_HOST:localhost}
+      port:       ${REDIS_PORT:6379}
+      password:   ${REDIS_PASSWORD:}
+      timeout:    2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle:   4
+          min-idle:   1
+
+  # ── Jackson ───────────────────────────────────────────────────────────────
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# ── Actuator ─────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# ── Server ───────────────────────────────────────────────────────────────
+server:
+  port: ${AUTH_PORT:8085}
+  shutdown: graceful
+
+# ── AuroraForge Auth Configuration ──────────────────────────────────────
+auroraforge:
+  cloud:
+    provider: ${CLOUD_PROVIDER:LOCAL}
+
+  auth:
+    server:
+      enabled: true
+      flyway-table: flyway_schema_history_auth
+
+  jwt:
+    issuer:                    ${JWT_ISSUER:https://auth.auroraforge.io}
+    access-token-expiry-seconds:  ${JWT_ACCESS_EXPIRY:900}        # 15 min
+    refresh-token-expiry-seconds: ${JWT_REFRESH_EXPIRY:86400}     # 24 h
+    rsa-key:
+      # LOCAL/test default: auto-generate ephemeral key pair on startup.
+      # Override with private-key-base64 + public-key-base64 for stable local keys.
+      generate-on-startup: ${JWT_RSA_GENERATE:true}
+      key-id: ${JWT_KEY_ID:auroraforge-auth-key-1}
+
+  security:
+    cors:
+      allowed-origins:
+        - ${CORS_ORIGIN:http://localhost:3000}
+      allow-credentials: false
+      max-age-seconds: 1800
+    rate-limit:
+      tokens-per-minute: ${RATE_LIMIT_TPM:60}
+      burst-capacity:    ${RATE_LIMIT_BURST:10}
+    token-blacklist:
+      enabled:    ${TOKEN_BLACKLIST_ENABLED:true}
+      key-prefix: "af:jwt:bl:"
+    bcrypt-strength: ${BCRYPT_STRENGTH:12}
+
+# ── Resilience4j ──────────────────────────────────────────────────────────
+resilience4j:
+  retry:
+    instances:
+      key-load:
+        max-attempts: 3
+        wait-duration: 1s
+        retry-exceptions:
+          - java.io.IOException
+          - software.amazon.awssdk.core.exception.SdkException
+          - com.azure.core.exception.AzureException
+
+# ── Logging ───────────────────────────────────────────────────────────────
+logging:
+  level:
+    io.auroraforge:                 INFO
+    org.springframework.security:   WARN
+    com.nimbusds:                   WARN

@@ -1,0 +1,34 @@
+# =============================================================================
+# Kustomize Overlay – AWS / EKS
+# Adds: IRSA annotations, EBS StorageClass, AWS-specific ConfigMaps
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  cloud: aws
+
+patches:
+  # Annotate the app ServiceAccount with the IRSA role ARN (output from Terraform)
+  - target:
+      kind: ServiceAccount
+      name: auroraforge-app
+      namespace: auroraforge
+    patch: |-
+      - op: add
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: $(AWS_APP_KMS_ROLE_ARN)
+
+configMapGenerator:
+  - name: cloud-config
+    namespace: auroraforge
+    literals:
+      - CLOUD_PROVIDER=aws
+      - AWS_REGION=us-east-1
+      - S3_RAW_BUCKET=$(AWS_S3_RAW_BUCKET)
+      - S3_PROCESSED_BUCKET=$(AWS_S3_PROCESSED_BUCKET)
+      - KMS_KEY_ALIAS=$(AWS_KMS_APP_KEY_ALIAS)
+      - OTEL_EXPORTER_TYPE=otlp

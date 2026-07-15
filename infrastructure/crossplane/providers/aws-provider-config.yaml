@@ -1,0 +1,15 @@
+# =============================================================================
+# AWS ProviderConfig – uses IRSA (IAM Roles for Service Accounts)
+# The Crossplane controller's ServiceAccount is annotated with the IAM role ARN.
+# No long-lived credentials stored in the cluster.
+# =============================================================================
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: auroraforge-aws
+  annotations:
+    crossplane.io/description: "Primary AWS provider config using IRSA"
+spec:
+  credentials:
+    source: IRSA
+  # Inherit region from each managed resource's forProvider.region field

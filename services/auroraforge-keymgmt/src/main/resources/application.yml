@@ -1,0 +1,95 @@
+spring:
+  application:
+    name: auroraforge-keymgmt
+  threads:
+    virtual:
+      enabled: true
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=300s   # key-version metadata cache (not DEK cache)
+
+  # JPA / Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate    # Flyway owns the schema; Hibernate must not modify it
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  # Flyway — separate history table from the ingestion module
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    table: flyway_schema_history_keymgmt
+    baseline-on-migrate: false
+
+server:
+  port: ${SERVER_PORT:8084}
+  shutdown: graceful
+
+management:
+  server:
+    port: 8094
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  health:
+    circuitbreakers:
+      enabled: true
+
+auroraforge:
+  cloud:
+    # Default to LOCAL so the service starts safely without cloud credentials.
+    # Override via CLOUD_PROVIDER env var or activate the aws/azure Spring profile.
+    provider: ${CLOUD_PROVIDER:LOCAL}
+
+  keymgmt:
+    rotation:
+      enabled: true
+      # Cron expressions (Spring format: second minute hour day-of-month month day-of-week)
+      public-keys-cron:        "0 0 2 ? * SUN"   # Every Sunday at 02:00 UTC
+      internal-keys-cron:      "0 0 2 ? * SUN"
+      confidential-keys-cron:  "0 0 3 1 * ?"     # 1st of every month at 03:00 UTC
+      restricted-keys-cron:    "0 0 4 1 * ?"     # 1st of every month at 04:00 UTC
+      # In-memory DEK TTLs (shorter = less exposure on memory dump, higher KMS call rate)
+      public-data-key-ttl-seconds:        300     # 5 min
+      internal-data-key-ttl-seconds:      300
+      confidential-data-key-ttl-seconds:  60      # 1 min
+      restricted-data-key-ttl-seconds:    60
+      data-key-rotation-days:             90
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      key-management:
+        failure-rate-threshold:      20    # open CB after 20% failure rate
+        wait-duration-in-open-state: 60s
+        sliding-window-size:         10
+        register-health-indicator:   true
+  retry:
+    instances:
+      key-management:
+        max-attempts:                  3
+        wait-duration:                 500ms
+        enable-exponential-backoff:    true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - software.amazon.awssdk.core.exception.SdkClientException
+          - com.azure.core.exception.AzureException
+  timelimiter:
+    instances:
+      key-management:
+        timeout-duration: 5s
+
+logging:
+  level:
+    io.auroraforge:                       INFO
+    com.azure.security.keyvault:          WARN
+    software.amazon.awssdk.services.kms:  WARN
+    org.flywaydb:                         INFO

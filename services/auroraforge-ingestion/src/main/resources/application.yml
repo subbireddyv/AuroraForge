@@ -1,0 +1,184 @@
+# =============================================================================
+# AuroraForge Ingestion Service – Application Configuration
+# Profile-based overrides: application-docker.yml, application-aws.yml, application-azure.yml
+# =============================================================================
+
+spring:
+  application:
+    name: auroraforge-ingestion
+
+  threads:
+    virtual:
+      enabled: true   # Project Loom – virtual threads for Tomcat
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:auroraforge}
+    username: ${POSTGRES_USER:auroraforge}
+    password: ${POSTGRES_PASSWORD:auroraforge_dev_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: ingestion-hikari
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000      # 3 s – fail fast; don't queue requests
+      idle-timeout: 600000          # 10 min
+      max-lifetime: 1800000         # 30 min
+      keepalive-time: 30000
+      connection-test-query: SELECT 1
+      data-source-properties:
+        prepareThreshold: 5         # PostgreSQL prepared statement threshold
+        preparedStatementCacheQueries: 256
+
+  jpa:
+    hibernate:
+      ddl-auto: validate            # Schema managed by Flyway; Hibernate only validates
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        generate_statistics: false
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+          order_updates: true
+        cache:
+          use_second_level_cache: false  # No L2 cache – Cosmos DB sync would be out of sync
+    open-in-view: false             # Never keep transactions open across HTTP boundary
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9093,kafka-3:9094}
+    properties:
+      schema-registry-url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+      retries: 2147483647
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        compression.type: lz4
+        batch.size: 16384
+        linger.ms: 5
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful        # Wait for in-flight requests before shutting down
+  compression:
+    enabled: true
+    mime-types: application/json,application/problem+json
+  tomcat:
+    threads:
+      max: 200
+
+management:
+  server:
+    port: 8091              # Actuator on separate port – not exposed externally
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers,threaddump,heapdump
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true       # Kubernetes liveness/readiness probes
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      cloud: ${CLOUD_PROVIDER:local}
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0      # 100% in dev; reduce to 0.1 in production via env var
+
+# ── OpenTelemetry ──────────────────────────────────────────────────────────
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_ENDPOINT:http://otel-collector:4317}
+      protocol: grpc
+  service:
+    name: ${spring.application.name}
+  resource:
+    attributes:
+      deployment.environment: ${DEPLOYMENT_ENV:local}
+      cloud.provider: ${CLOUD_PROVIDER:local}
+
+# ── Resilience4j ───────────────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafka-publisher:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+      db-storage:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 20
+        register-health-indicator: true
+      key-management:
+        failure-rate-threshold: 20
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        register-health-indicator: true
+  retry:
+    instances:
+      kafka-publisher:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: false
+      db-storage:
+        max-attempts: 3
+        wait-duration: 100ms
+      key-management:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+  timelimiter:
+    instances:
+      key-management:
+        timeout-duration: 5s
+
+# ── AuroraForge custom properties ──────────────────────────────────────────
+auroraforge:
+  kafka:
+    topic-prefix: auroraforge.events
+  security:
+    enabled: true
+  ingestion:
+    stale-processing-threshold-minutes: 30   # Events stuck in PROCESSING after 30 min trigger retry
+    stale-processing-scan-interval-ms: 60000
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.springframework.kafka: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: >
+      %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level
+      [%X{traceId},%X{spanId}] [%X{tenantId}] %logger{36} - %msg%n

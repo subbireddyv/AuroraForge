@@ -1,0 +1,21 @@
+resource_group_name = "auroraforge-rg"
+location            = "eastus"
+secondary_location  = "westus2"
+environment         = "prod"
+project_name        = "auroraforge"
+
+vnet_address_space   = ["10.1.0.0/16"]
+aks_subnet_cidr      = "10.1.1.0/24"
+services_subnet_cidr = "10.1.2.0/24"
+
+aks_kubernetes_version  = "1.29"
+aks_system_node_vm_size = "Standard_D4s_v5"
+aks_app_node_vm_size    = "Standard_D8s_v5"
+aks_app_node_min_count  = 2
+aks_app_node_max_count  = 10
+
+cosmos_db_throughput        = 1000
+cosmos_db_secondary_region  = "westus2"
+
+key_vault_sku                        = "premium"
+key_vault_soft_delete_retention_days = 90

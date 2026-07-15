@@ -1,0 +1,56 @@
+spring:
+  config:
+    activate:
+      on-profile: azure
+  kafka:
+    bootstrap-servers: ${AZURE_EVENTHUB_NAMESPACE}.servicebus.windows.net:9093
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: PLAIN
+      sasl.jaas.config: >
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="$ConnectionString"
+        password="${AZURE_EVENTHUB_CONNECTION_STRING}";
+    streams:
+      bootstrap-servers: ${AZURE_EVENTHUB_NAMESPACE}.servicebus.windows.net:9093
+      properties:
+        security.protocol: SASL_SSL
+        sasl.mechanism: PLAIN
+        sasl.jaas.config: >
+          org.apache.kafka.common.security.plain.PlainLoginModule required
+          username="$ConnectionString"
+          password="${AZURE_EVENTHUB_CONNECTION_STRING}";
+
+auroraforge:
+  cloud:
+    provider: AZURE
+  azure:
+    subscription-id: ${AZURE_SUBSCRIPTION_ID}
+    resource-group: ${AZURE_RESOURCE_GROUP}
+    location: ${AZURE_LOCATION:eastus}
+    blob:
+      account-name: ${AZURE_STORAGE_ACCOUNT}
+      processed-container: processed
+
+  spark:
+    master: ${SPARK_MASTER_URL}
+    app-name: auroraforge-processing-azure
+    deploy-mode: cluster
+    jars:
+      - abfss://jars@${AZURE_STORAGE_ACCOUNT}.dfs.core.windows.net/auroraforge-processing.jar
+    config:
+      spark.sql.shuffle.partitions: "200"
+      spark.executor.memory: "4g"
+      spark.executor.cores: "4"
+      spark.executor.instances: "10"
+      spark.kubernetes.container.image: ${SPARK_IMAGE}
+      spark.kubernetes.namespace: auroraforge-spark
+      spark.hadoop.fs.azure.account.auth.type: OAuth
+      spark.hadoop.fs.azure.account.oauth.provider.type: org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityCredential
+      spark.checkpoint.dir: abfss://checkpoints@${AZURE_STORAGE_ACCOUNT}.dfs.core.windows.net/
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.apache.spark: WARN
+    com.azure: WARN

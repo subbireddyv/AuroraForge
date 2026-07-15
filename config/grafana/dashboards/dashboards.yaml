@@ -1,0 +1,17 @@
+# =============================================================================
+# Grafana Dashboard Provisioning – points to the dashboards folder
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: AuroraForge
+    orgId: 1
+    folder: AuroraForge
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

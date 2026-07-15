@@ -1,0 +1,47 @@
+spring:
+  config:
+    activate:
+      on-profile: aws
+  datasource:
+    url:      jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:auroraforge}
+    username: ${DB_USER:auroraforge}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle:      5
+      connection-timeout: 5000
+  data:
+    redis:
+      host:     ${REDIS_HOST}
+      port:     ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+
+auroraforge:
+  cloud:
+    provider: AWS
+  jwt:
+    issuer: ${JWT_ISSUER:https://auth.auroraforge.io}
+    rsa-key:
+      generate-on-startup: false
+      # ARN of the Secrets Manager secret storing:
+      #   PRIVATE_KEY_B64=<PKCS8 DER base64>
+      #   PUBLIC_KEY_B64=<X.509 DER base64>
+      secrets-manager-arn: ${JWT_RSA_KEY_ARN}
+      key-id: ${JWT_KEY_ID:auroraforge-auth-key-1}
+  security:
+    cors:
+      allowed-origins:
+        - ${CORS_ORIGIN:https://app.auroraforge.io}
+      allow-credentials: true
+    rate-limit:
+      tokens-per-minute: 60
+      burst-capacity: 10
+    token-blacklist:
+      enabled: true
+
+logging:
+  level:
+    io.auroraforge:                       INFO
+    software.amazon.awssdk.services.secretsmanager: WARN

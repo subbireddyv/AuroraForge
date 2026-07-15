@@ -1,0 +1,222 @@
+##############################################################################
+# Crossplane Composition – AWS Object Storage (S3)
+#
+# Maps the cloud-agnostic XObjectStore API to:
+#  - aws_s3_bucket (versioned, SSE-KMS)
+#  - aws_s3_bucket_versioning
+#  - aws_s3_bucket_server_side_encryption_configuration (CMK)
+#  - aws_s3_bucket_lifecycle_configuration (IA → Glacier → expire)
+#  - aws_s3_bucket_public_access_block (all public access blocked)
+#
+# The composition reads `spec.cloud` label from the Claim and selects this
+# composition via CompositionSelector matchLabels in the XRD.
+##############################################################################
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: objectstore-aws
+  labels:
+    cloud: aws
+    provider: upbound-aws
+spec:
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XObjectStore
+
+  mode: Pipeline
+  pipeline:
+    # ── Step 1: S3 Bucket ──────────────────────────────────────────────────
+    - step: create-s3-bucket
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: s3-bucket
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: Bucket
+              spec:
+                forProvider:
+                  region: us-east-1
+                  forceDestroy: false
+                  tags:
+                    ManagedBy: crossplane
+                    Project: auroraforge
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.bucketName
+                toFieldPath: metadata.annotations["crossplane.io/external-name"]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.tenantId
+                toFieldPath: spec.forProvider.tags.TenantId
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.classification
+                toFieldPath: spec.forProvider.tags.DataClassification
+              # Write bucket ARN back to composite status
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.arn
+                toFieldPath: status.bucketArn
+
+    # ── Step 2: Block all public access ───────────────────────────────────
+    - step: block-public-access
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: public-access-block
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketPublicAccessBlock
+              spec:
+                forProvider:
+                  region: us-east-1
+                  blockPublicAcls: true
+                  blockPublicPolicy: true
+                  ignorePublicAcls: true
+                  restrictPublicBuckets: true
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+
+    # ── Step 3: Versioning ─────────────────────────────────────────────────
+    - step: enable-versioning
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket-versioning
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketVersioning
+              spec:
+                forProvider:
+                  region: us-east-1
+                  versioningConfiguration:
+                    - status: Enabled
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+
+    # ── Step 4: SSE-KMS encryption ────────────────────────────────────────
+    - step: enable-sse-kms
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket-encryption
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketServerSideEncryptionConfiguration
+              spec:
+                forProvider:
+                  region: us-east-1
+                  rule:
+                    - applyServerSideEncryptionByDefault:
+                        - sseAlgorithm: aws:kms
+                      bucketKeyEnabled: true  # reduces KMS API calls by ~99%
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.kmsKeyArn
+                toFieldPath: spec.forProvider.rule[0].applyServerSideEncryptionByDefault[0].kmsMasterKeyId
+
+    # ── Step 5: Lifecycle rules (IA → Glacier → expire) ───────────────────
+    - step: lifecycle-rules
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket-lifecycle
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketLifecycleConfiguration
+              spec:
+                forProvider:
+                  region: us-east-1
+                  rule:
+                    - id: transition-to-infrequent-access
+                      status: Enabled
+                      filter:
+                        - prefix: ""
+                      transition:
+                        - days: 30
+                          storageClass: STANDARD_IA
+                    - id: transition-to-glacier
+                      status: Enabled
+                      filter:
+                        - prefix: ""
+                      transition:
+                        - days: 90
+                          storageClass: GLACIER
+                    - id: expire-old-objects
+                      status: Enabled
+                      filter:
+                        - prefix: ""
+                      expiration:
+                        - days: 2555  # ~7 years; overridden by retention config
+                    - id: delete-incomplete-multipart
+                      status: Enabled
+                      filter:
+                        - prefix: ""
+                      abortIncompleteMultipartUpload:
+                        - daysAfterInitiation: 7
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.retentionDays
+                toFieldPath: spec.forProvider.rule[2].expiration[0].days
+
+    # ── Step 6: CORS configuration (optional, for presigned URL downloads) ─
+    - step: cors-configuration
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: bucket-cors
+            base:
+              apiVersion: s3.aws.upbound.io/v1beta1
+              kind: BucketCorsConfiguration
+              spec:
+                forProvider:
+                  region: us-east-1
+                  corsRule:
+                    - allowedHeaders: ["*"]
+                      allowedMethods: ["GET", "PUT"]
+                      allowedOrigins: ["https://*.auroraforge.io"]
+                      exposeHeaders: ["ETag", "Content-Length"]
+                      maxAgeSeconds: 3600
+                  bucketSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region

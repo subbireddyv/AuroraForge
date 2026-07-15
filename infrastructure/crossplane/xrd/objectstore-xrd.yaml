@@ -1,0 +1,118 @@
+##############################################################################
+# Crossplane XRD – Cloud-Agnostic Object Storage
+#
+# Defines the abstract API for cloud object storage provisioning.
+# Applications request storage via a namespace-scoped ObjectStore Claim;
+# the Composition (aws-storage-composition or azure-storage-composition)
+# translates the claim into provider-specific managed resources.
+##############################################################################
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xobjectstores.platform.auroraforge.io
+spec:
+  group: platform.auroraforge.io
+  names:
+    kind: XObjectStore
+    plural: xobjectstores
+
+  # Namespace-scoped claims
+  claimNames:
+    kind: ObjectStore
+    plural: objectstores
+
+  # Default to AWS composition; override via spec.compositionSelector
+  defaultCompositionRef:
+    name: objectstore-aws
+
+  connectionSecretKeys:
+    - endpoint
+    - storageAccountId
+    - bucketArn
+
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [parameters]
+              properties:
+                region:
+                  type: string
+                  description: "Cloud region (AWS: us-east-1, Azure: eastus)"
+                  default: "us-east-1"
+
+                cloud:
+                  type: string
+                  description: "Target cloud (selects Composition). One of: aws, azure"
+                  enum: [aws, azure]
+
+                parameters:
+                  type: object
+                  required: [tenantId, classification]
+                  properties:
+                    tenantId:
+                      type: string
+                      description: "Owning tenant identifier for tagging and cost allocation"
+                      minLength: 3
+                      maxLength: 64
+
+                    classification:
+                      type: string
+                      description: "Data classification tier — governs encryption and retention"
+                      enum: [PUBLIC, INTERNAL, CONFIDENTIAL, RESTRICTED]
+
+                    bucketName:
+                      type: string
+                      description: "Desired S3 bucket name (AWS). Auto-generated if empty."
+                      maxLength: 63
+
+                    accountReplicationType:
+                      type: string
+                      description: "Azure storage replication type"
+                      enum: [LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS]
+                      default: GRS
+
+                    resourceGroupName:
+                      type: string
+                      description: "Azure Resource Group (Azure compositions only)"
+
+                    kmsKeyArn:
+                      type: string
+                      description: "AWS KMS CMK ARN for SSE-KMS (AWS compositions only)"
+
+                    keyVaultKeyId:
+                      type: string
+                      description: "Azure Key Vault key identifier for CMK (Azure compositions only)"
+
+                    retentionDays:
+                      type: integer
+                      description: "Object expiry in days (used by lifecycle rules)"
+                      minimum: 30
+                      maximum: 3650
+                      default: 2555
+
+                    enableVersioning:
+                      type: boolean
+                      description: "Enable object versioning (AWS only; always on for Azure GRS)"
+                      default: true
+
+            status:
+              type: object
+              properties:
+                endpoint:
+                  type: string
+                  description: "Primary endpoint for the provisioned storage"
+                bucketArn:
+                  type: string
+                  description: "S3 Bucket ARN (AWS only)"
+                storageAccountId:
+                  type: string
+                  description: "Azure Storage Account resource ID (Azure only)"
+                ready:
+                  type: boolean

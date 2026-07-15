@@ -1,0 +1,215 @@
+##############################################################################
+# Crossplane Composition – Azure Object Storage (Blob)
+#
+# Maps the cloud-agnostic XObjectStore API to:
+#  - azurerm_storage_account (LRS/GRS, CMK encryption, private endpoint ready)
+#  - azurerm_storage_container (private access — no public blob access)
+#  - azurerm_storage_management_policy (lifecycle: Cool → Archive → delete)
+#
+# Selected when Claim specifies spec.cloud: azure or CompositionSelector
+# matchLabels: cloud=azure.
+##############################################################################
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: objectstore-azure
+  labels:
+    cloud: azure
+    provider: upbound-azure
+spec:
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XObjectStore
+
+  mode: Pipeline
+  pipeline:
+    # ── Step 1: Storage Account ────────────────────────────────────────────
+    - step: create-storage-account
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: storage-account
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: Account
+              spec:
+                forProvider:
+                  resourceGroupNameSelector:
+                    matchControllerRef: false
+                  location: eastus
+                  accountKind: StorageV2
+                  accountTier: Standard
+                  accountReplicationType: GRS      # Geo-redundant for DR
+                  accessTier: Hot
+                  enableHttpsTrafficOnly: true
+                  minTlsVersion: TLS1_2
+                  allowNestedItemsToBePublic: false
+                  sharedAccessKeyEnabled: false     # Managed Identity only
+                  isHnsEnabled: false               # Set true for ADLS Gen2
+                  tags:
+                    ManagedBy: crossplane
+                    Project: auroraforge
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.location
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.resourceGroupName
+                toFieldPath: spec.forProvider.resourceGroupName
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.accountReplicationType
+                toFieldPath: spec.forProvider.accountReplicationType
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.tenantId
+                toFieldPath: spec.forProvider.tags.TenantId
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.classification
+                toFieldPath: spec.forProvider.tags.DataClassification
+              # Write storage account primary endpoint back to composite status
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.primaryBlobEndpoint
+                toFieldPath: status.endpoint
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.storageAccountId
+
+    # ── Step 2: CMK encryption via Key Vault ──────────────────────────────
+    - step: enable-cmk-encryption
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: storage-account-cmk
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: AccountCustomerManagedKey
+              spec:
+                forProvider:
+                  keyVaultKeyId: ""  # Patched from composite spec
+                  storageAccountIdSelector:
+                    matchControllerRef: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.keyVaultKeyId
+                toFieldPath: spec.forProvider.keyVaultKeyId
+
+    # ── Step 3: Private container for raw events ───────────────────────────
+    - step: create-raw-container
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: raw-container
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: Container
+              metadata:
+                annotations:
+                  crossplane.io/external-name: raw
+              spec:
+                forProvider:
+                  containerAccessType: private
+                  storageAccountNameSelector:
+                    matchControllerRef: true
+            patches: []
+
+    # ── Step 4: Private container for processed data ───────────────────────
+    - step: create-processed-container
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: processed-container
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: Container
+              metadata:
+                annotations:
+                  crossplane.io/external-name: processed
+              spec:
+                forProvider:
+                  containerAccessType: private
+                  storageAccountNameSelector:
+                    matchControllerRef: true
+            patches: []
+
+    # ── Step 5: Backup container ───────────────────────────────────────────
+    - step: create-backup-container
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: backup-container
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: Container
+              metadata:
+                annotations:
+                  crossplane.io/external-name: backup
+              spec:
+                forProvider:
+                  containerAccessType: private
+                  storageAccountNameSelector:
+                    matchControllerRef: true
+            patches: []
+
+    # ── Step 6: Lifecycle management (Cool → Archive → delete) ────────────
+    - step: lifecycle-management
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: storage-lifecycle
+            base:
+              apiVersion: storage.azure.upbound.io/v1beta1
+              kind: ManagementPolicy
+              spec:
+                forProvider:
+                  storageAccountIdSelector:
+                    matchControllerRef: true
+                  rule:
+                    - name: tier-to-cool
+                      enabled: true
+                      filters:
+                        blobTypes: ["blockBlob"]
+                      actions:
+                        baseBlob:
+                          tierToCoolAfterDaysSinceModificationGreaterThan: 30
+                    - name: tier-to-archive
+                      enabled: true
+                      filters:
+                        blobTypes: ["blockBlob"]
+                      actions:
+                        baseBlob:
+                          tierToArchiveAfterDaysSinceModificationGreaterThan: 90
+                    - name: delete-old-blobs
+                      enabled: true
+                      filters:
+                        blobTypes: ["blockBlob"]
+                      actions:
+                        baseBlob:
+                          deleteAfterDaysSinceModificationGreaterThan: 2555
+                    - name: delete-snapshots
+                      enabled: true
+                      filters:
+                        blobTypes: ["blockBlob"]
+                      actions:
+                        snapshot:
+                          deleteAfterDaysSinceCreationGreaterThan: 90
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.retentionDays
+                toFieldPath: spec.forProvider.rule[2].actions.baseBlob.deleteAfterDaysSinceModificationGreaterThan

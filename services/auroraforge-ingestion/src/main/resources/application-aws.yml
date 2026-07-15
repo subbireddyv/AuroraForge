@@ -1,0 +1,105 @@
+##############################################################################
+# AuroraForge Ingestion – AWS (EKS) profile
+# Activated with: --spring.profiles.active=aws
+# Credentials: IRSA via OIDC token file (AWS_WEB_IDENTITY_TOKEN_FILE env var)
+##############################################################################
+spring:
+  config:
+    activate:
+      on-profile: aws
+
+  datasource:
+    url: jdbc:postgresql://${AWS_RDS_ENDPOINT}:5432/${AWS_RDS_DB_NAME:auroraforge}
+    username: ${AWS_RDS_USERNAME:auroraforge}
+    # Password injected from Secrets Manager by the Secrets Store CSI Driver
+    password: ${AWS_RDS_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+      validation-timeout: 3000
+      keepalive-time: 60000
+      max-lifetime: 1800000
+
+  kafka:
+    bootstrap-servers: ${AWS_MSK_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: AWS_MSK_IAM
+      sasl.jaas.config: software.amazon.msk.auth.iam.IAMLoginModule required;
+      sasl.client.callback.handler.class: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+      ssl.truststore.location: /etc/ssl/certs/ca-certificates.crt
+
+  data:
+    redis:
+      # ElastiCache Redis cluster mode disabled endpoint
+      host: ${AWS_ELASTICACHE_HOST}
+      port: 6379
+      ssl:
+        enabled: true
+      timeout: 2000
+
+  flyway:
+    url: jdbc:postgresql://${AWS_RDS_ENDPOINT}:5432/${AWS_RDS_DB_NAME:auroraforge}
+    user: ${AWS_RDS_USERNAME:auroraforge}
+    password: ${AWS_RDS_PASSWORD}
+    out-of-order: false
+    validate-on-migrate: true
+
+auroraforge:
+  cloud:
+    provider: AWS
+    enable-multi-cloud: true
+    enable-cross-cloud-sync: true
+    primary-region: ${AWS_REGION:us-east-1}
+    secondary-region: ${AWS_SECONDARY_REGION:us-west-2}
+    failover-policy: AUTOMATIC
+
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    secondary-region: ${AWS_SECONDARY_REGION:us-west-2}
+    kms:
+      app-data-key-alias: ${AWS_KMS_APP_DATA_KEY_ALIAS:alias/auroraforge-app-data}
+      rds-key-alias: ${AWS_KMS_RDS_KEY_ALIAS:alias/auroraforge-rds}
+      s3-key-alias: ${AWS_KMS_S3_KEY_ALIAS:alias/auroraforge-s3}
+      cloudwatch-key-alias: ${AWS_KMS_CW_KEY_ALIAS:alias/auroraforge-cloudwatch}
+    s3:
+      raw-bucket: ${AWS_S3_RAW_BUCKET}
+      processed-bucket: ${AWS_S3_PROCESSED_BUCKET}
+      spark-checkpoints-bucket: ${AWS_S3_SPARK_BUCKET}
+      backup-bucket: ${AWS_S3_BACKUP_BUCKET}
+      multipart-threshold-mb: 100
+      multipart-part-size-mb: 50
+    rds:
+      endpoint: ${AWS_RDS_ENDPOINT}
+      reader-endpoint: ${AWS_RDS_READER_ENDPOINT}
+      secret-arn: ${AWS_RDS_SECRET_ARN}
+      db-name: ${AWS_RDS_DB_NAME:auroraforge}
+      max-pool-size: 20
+      min-idle: 5
+
+  kafka:
+    prefix: auroraforge
+    default-replication-factor: 3
+    default-min-insync-replicas: 2
+
+  retention:
+    enable-auto-purge: true
+    purge-schedule-cron-seconds: 3600
+    purge-max-batch-size: 500
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_COLLECTOR_ENDPOINT:http://otel-collector.observability.svc.cluster.local:4317}
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.apache.kafka: WARN
+    software.amazon.awssdk: WARN

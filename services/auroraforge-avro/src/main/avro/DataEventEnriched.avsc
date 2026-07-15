@@ -1,0 +1,85 @@
+{
+  "type": "record",
+  "name": "DataEventEnriched",
+  "namespace": "io.auroraforge.avro",
+  "doc": "Enriched event produced by the Kafka Streams enrichment pipeline. Extends DataEvent fields with processing metadata added by the stateful transformer.",
+  "fields": [
+    { "name": "id",            "type": "string" },
+    { "name": "tenantId",      "type": "string" },
+    { "name": "sourceSystem",  "type": "string" },
+    { "name": "eventType",     "type": "string" },
+    {
+      "name": "classification",
+      "type": {
+        "type": "enum",
+        "name": "DataClassification",
+        "symbols": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+      }
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "EventStatus",
+        "symbols": ["RECEIVED", "VALIDATING", "ENCRYPTING", "ENCRYPTED", "PUBLISHED", "FAILED", "ARCHIVED"]
+      }
+    },
+    { "name": "schemaVersion",   "type": "string", "default": "1.0" },
+    { "name": "idempotencyKey",  "type": "string" },
+    { "name": "payloadSizeBytes","type": "int",    "default": 0 },
+    {
+      "name": "createdAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" }
+    },
+    {
+      "name": "metadata",
+      "type": { "type": "map", "values": "string" },
+      "default": {}
+    },
+
+    {
+      "name": "enrichedAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "UTC epoch millis when the Kafka Streams enrichment transformer processed this event"
+    },
+    {
+      "name": "processorId",
+      "type": "string",
+      "doc": "Kafka Streams application instance ID that enriched this record (for debugging)"
+    },
+    {
+      "name": "windowedEventCount",
+      "type": "long",
+      "default": 0,
+      "doc": "Number of events from this tenant in the current 5-minute tumbling window (from RocksDB state)"
+    },
+    {
+      "name": "anomalyScore",
+      "type": "double",
+      "default": 0.0,
+      "doc": "Burst anomaly score [0.0-1.0]. Score > 0.8 indicates a rate spike vs 24h rolling average."
+    },
+    {
+      "name": "anomalyDetected",
+      "type": "boolean",
+      "default": false,
+      "doc": "True if anomalyScore exceeds the configured threshold"
+    },
+    {
+      "name": "enrichmentLatencyMs",
+      "type": "long",
+      "default": 0,
+      "doc": "Wall-clock latency of enrichment processing in milliseconds"
+    },
+    {
+      "name": "processingPath",
+      "type": {
+        "type": "enum",
+        "name": "ProcessingPath",
+        "symbols": ["FAST_PATH", "ENRICHMENT_PATH"],
+        "doc": "FAST_PATH for PUBLIC/INTERNAL; ENRICHMENT_PATH for CONFIDENTIAL/RESTRICTED"
+      },
+      "default": "FAST_PATH"
+    }
+  ]
+}

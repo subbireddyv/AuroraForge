@@ -1,0 +1,144 @@
+# =============================================================================
+# Composition – Azure Database (Cosmos DB NoSQL)
+# Selected when: compositionSelector label cloud=azure on the XDatabase claim.
+#
+# Provisions:
+#  1. Cosmos DB Account with active-active multi-region writes
+#  2. Cosmos DB SQL Database
+#  3. Container with configurable partition key and throughput
+# =============================================================================
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: database-azure
+  labels:
+    cloud: azure
+    engine: cosmos-nosql
+  annotations:
+    crossplane.io/description: "Provisions a Cosmos DB NoSQL account on Azure"
+spec:
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XDatabase
+
+  mode: Pipeline
+  pipeline:
+
+    # ---- Step 1: Cosmos DB Account ------------------------------------------
+    - step: provision-cosmos-account
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: cosmos-account
+            base:
+              apiVersion: cosmosdb.azure.upbound.io/v1beta1
+              kind: Account
+              spec:
+                forProvider:
+                  location: eastus
+                  resourceGroupNameSelector:
+                    matchLabels:
+                      crossplane.io/claim-namespace: "true"
+                  offerType: Standard
+                  kind: GlobalDocumentDB
+                  consistencyPolicy:
+                    - consistencyLevel: BoundedStaleness
+                      maxIntervalInSeconds: 300
+                      maxStalenessPrefix: 100000
+                  geoLocation:
+                    - location: eastus
+                      failoverPriority: 0
+                      zoneRedundant: true
+                    - location: westus2
+                      failoverPriority: 1
+                      zoneRedundant: true
+                  enableAutomaticFailover: true
+                  enableMultipleWriteLocations: true   # Active-active
+                  isVirtualNetworkFilterEnabled: false  # Use private endpoints in prod
+                  publicNetworkAccessEnabled: false
+                  analyticalStorageEnabled: true
+                  backup:
+                    - type: Continuous
+                      tier: Continuous30Days
+                providerConfigRef:
+                  name: auroraforge-azure
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.location
+                transforms:
+                  - type: map
+                    map:
+                      "": "eastus"
+
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.endpoint
+                toFieldPath: status.endpoint
+
+    # ---- Step 2: Cosmos DB SQL Database -------------------------------------
+    - step: provision-cosmos-database
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: cosmos-database
+            base:
+              apiVersion: cosmosdb.azure.upbound.io/v1beta1
+              kind: SQLDatabase
+              spec:
+                forProvider:
+                  accountNameSelector:
+                    matchControllerRef: true
+                  resourceGroupNameSelector:
+                    matchLabels:
+                      crossplane.io/claim-namespace: "true"
+                providerConfigRef:
+                  name: auroraforge-azure
+
+    # ---- Step 3: Default Container ------------------------------------------
+    - step: provision-cosmos-container
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: cosmos-container
+            base:
+              apiVersion: cosmosdb.azure.upbound.io/v1beta1
+              kind: SQLContainer
+              spec:
+                forProvider:
+                  accountNameSelector:
+                    matchControllerRef: true
+                  databaseNameSelector:
+                    matchControllerRef: true
+                  resourceGroupNameSelector:
+                    matchLabels:
+                      crossplane.io/claim-namespace: "true"
+                  partitionKeyPath: /tenantId
+                  partitionKeyVersion: 2
+                  throughput: 1000
+                  indexingPolicy:
+                    - indexingMode: consistent
+                      includedPath:
+                        - path: "/*"
+                  conflictResolutionPolicy:
+                    - mode: LastWriterWins
+                      conflictResolutionPath: /_ts
+                providerConfigRef:
+                  name: auroraforge-azure
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.storageGb
+                toFieldPath: spec.forProvider.throughput
+                transforms:
+                  # Convert requested storage to approximate RU/s (100 RU/GB, min 400)
+                  - type: math
+                    math:
+                      multiply: 100

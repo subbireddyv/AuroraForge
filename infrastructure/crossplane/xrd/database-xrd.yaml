@@ -1,0 +1,106 @@
+# =============================================================================
+# CompositeResourceDefinition (XRD) – Cloud-Agnostic Database
+#
+# This XRD defines the single API surface that application teams use to
+# request a database. It abstracts away whether the underlying resource
+# is AWS RDS or Azure Cosmos DB. The Composition selected depends on the
+# cloud label set on the Claim.
+#
+# Usage:
+#   kubectl apply -f infrastructure/crossplane/xrd/database-xrd.yaml
+#   kubectl apply -f infrastructure/crossplane/compositions/
+#   kubectl apply -f infrastructure/crossplane/claims/primary-database-claim.yaml
+# =============================================================================
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xdatabases.platform.auroraforge.io
+  annotations:
+    crossplane.io/description: >
+      Cloud-agnostic relational/document database composite resource.
+      Maps to AWS RDS PostgreSQL on AWS, Cosmos DB on Azure.
+spec:
+  group: platform.auroraforge.io
+  names:
+    kind: XDatabase
+    plural: xdatabases
+  claimNames:
+    kind: Database
+    plural: databases
+
+  # Compositions are selected by the cloud label on the claim
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XDatabase
+
+  defaultCompositionRef:
+    name: database-aws    # Default to AWS; override via compositionSelector
+
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [parameters]
+              properties:
+                parameters:
+                  type: object
+                  required: [storageGb, engine, environmentType]
+                  properties:
+                    storageGb:
+                      type: integer
+                      description: "Storage size in GB."
+                      minimum: 20
+                      maximum: 16384
+                    engine:
+                      type: string
+                      description: "Database engine type."
+                      enum: [postgresql, cosmos-nosql]
+                    engineVersion:
+                      type: string
+                      description: "Engine version (e.g. '16.1' for PostgreSQL)."
+                      default: "16.1"
+                    environmentType:
+                      type: string
+                      description: "Deployment tier affecting instance size and HA."
+                      enum: [dev, staging, prod]
+                    region:
+                      type: string
+                      description: "Cloud region override. Defaults to the platform default."
+                    multiRegion:
+                      type: boolean
+                      description: "Enable multi-region replication (prod only)."
+                      default: false
+                    backupRetentionDays:
+                      type: integer
+                      description: "Number of days to retain automated backups."
+                      default: 30
+                      minimum: 1
+                      maximum: 35
+                    deletionProtection:
+                      type: boolean
+                      description: "Prevent accidental deletion of the database."
+                      default: true
+                    tags:
+                      type: object
+                      description: "Additional tags to apply to the cloud resource."
+                      additionalProperties:
+                        type: string
+
+            status:
+              type: object
+              properties:
+                endpoint:
+                  type: string
+                  description: "Connection endpoint (host:port) for the provisioned database."
+                port:
+                  type: integer
+                  description: "Port number."
+                atProvider:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true

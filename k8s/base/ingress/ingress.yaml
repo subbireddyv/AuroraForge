@@ -1,0 +1,58 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auroraforge-ingress
+  namespace: auroraforge
+  labels:
+    app.kubernetes.io/part-of: auroraforge
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/enable-cors: "false"   # CORS handled by SecurityConfig
+spec:
+  ingressClassName: nginx                              # overridden per overlay (alb / agic)
+  tls:
+    - hosts:
+        - api.auroraforge.io
+      secretName: auroraforge-tls
+  rules:
+    - host: api.auroraforge.io
+      http:
+        paths:
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auroraforge-auth
+                port:
+                  number: 8085
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: auroraforge-auth
+                port:
+                  number: 8085
+          - path: /api/v1/tenants
+            pathType: Prefix
+            backend:
+              service:
+                name: auroraforge-ingestion
+                port:
+                  number: 8081
+          - path: /api/v1/dr
+            pathType: Prefix
+            backend:
+              service:
+                name: auroraforge-sync
+                port:
+                  number: 8083
+          - path: /api/v1/keys
+            pathType: Prefix
+            backend:
+              service:
+                name: auroraforge-keymgmt
+                port:
+                  number: 8084

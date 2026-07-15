@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        AuroraForge Processing Service (Kafka Streams + Spark) — Logback configuration.
+        Spark and Kafka Streams are extremely chatty at INFO.  The loggers below
+        suppress noise from both frameworks while keeping auroraforge.processing
+        and resilience4j at INFO so SLA breaches and circuit-breaker transitions
+        remain visible in production logs.
+    -->
+
+    <springProperty name="SERVICE_NAME"    source="spring.application.name"    defaultValue="auroraforge-processing"/>
+    <springProperty name="SERVICE_VERSION" source="spring.application.version"  defaultValue="1.0.0-SNAPSHOT"/>
+
+    <property name="SERVICE" value="${SERVICE_NAME}"/>
+    <property name="VERSION" value="${SERVICE_VERSION}"/>
+
+    <include resource="logback-base.xml"/>
+
+    <!-- Kafka Streams internal topology / task lifecycle noise -->
+    <logger name="org.apache.kafka.streams"                          level="WARN"/>
+    <logger name="org.apache.kafka.streams.processor.internals"      level="ERROR"/>
+
+    <!-- Spark is extremely verbose — keep at WARN in all profiles -->
+    <logger name="org.apache.spark"                                  level="WARN"/>
+    <logger name="org.apache.hadoop"                                 level="WARN"/>
+    <logger name="org.sparkproject"                                  level="WARN"/>
+
+    <!-- Netty (used by Spark UI) -->
+    <logger name="io.netty"                                          level="WARN"/>
+
+    <springProfile name="dev">
+        <logger name="io.auroraforge.processing" level="DEBUG"/>
+        <logger name="org.apache.kafka.streams"  level="INFO"/>
+    </springProfile>
+
+    <springProfile name="prod,staging">
+        <logger name="io.auroraforge.processing" level="INFO"/>
+    </springProfile>
+
+</configuration>

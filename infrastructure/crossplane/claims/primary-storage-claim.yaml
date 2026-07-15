@@ -1,0 +1,44 @@
+##############################################################################
+# ObjectStore Claim – Primary Raw Events Storage
+#
+# Deployed in the auroraforge namespace in the target cluster.
+# Cloud selection: set spec.compositionSelector.matchLabels.cloud to aws|azure
+# or rely on the defaultCompositionRef (aws) in the XRD.
+##############################################################################
+apiVersion: platform.auroraforge.io/v1alpha1
+kind: ObjectStore
+metadata:
+  name: auroraforge-raw-storage
+  namespace: auroraforge
+  labels:
+    app.kubernetes.io/name: auroraforge-raw-storage
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/managed-by: crossplane
+spec:
+  # Select the cloud-specific composition
+  compositionSelector:
+    matchLabels:
+      cloud: aws         # Switch to 'azure' for Azure deployment
+
+  region: us-east-1      # Override to 'eastus' for Azure
+
+  parameters:
+    tenantId: platform
+    classification: CONFIDENTIAL
+
+    # AWS parameters (ignored on Azure)
+    bucketName: auroraforge-raw-events
+    kmsKeyArn: ""          # Filled in by ArgoCD / Helm values from Terraform output
+
+    # Azure parameters (ignored on AWS)
+    resourceGroupName: auroraforge-rg
+    keyVaultKeyId: ""      # Filled in by ArgoCD / Helm values from Terraform output
+    accountReplicationType: GRS
+
+    retentionDays: 2555
+    enableVersioning: true
+
+  # Connection secret written to the namespace for application pods
+  writeConnectionSecretToRef:
+    name: raw-storage-connection
+    namespace: auroraforge

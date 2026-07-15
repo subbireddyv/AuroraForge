@@ -1,0 +1,37 @@
+spring:
+  config:
+    activate:
+      on-profile: azure
+  datasource:
+    url:      jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:auroraforge}
+    username: ${DB_USER:auroraforge}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle:      2
+      connection-timeout: 5000
+
+auroraforge:
+  cloud:
+    provider: AZURE
+  azure:
+    subscription-id:  ${AZURE_SUBSCRIPTION_ID}
+    resource-group:   ${AZURE_RESOURCE_GROUP}
+    location:         ${AZURE_LOCATION:eastus}
+    keyvault:
+      uri:        ${AZURE_KEY_VAULT_URI}
+      key-name:   ${AZURE_KEY_VAULT_KEY_NAME:auroraforge-app-key}
+      # Blank = current (latest) version. After rotation, update to the new version
+      # so old ciphertext still decrypts while new data encrypts with the new version.
+      key-version: ${AZURE_KEY_VAULT_KEY_VERSION:}
+      use-hsm:    true
+
+  keymgmt:
+    encryption-context-version: "v1"
+    rotation:
+      data-key-rotation-days: 90
+
+logging:
+  level:
+    io.auroraforge:             INFO
+    com.azure.security.keyvault: WARN

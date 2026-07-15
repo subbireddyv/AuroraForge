@@ -1,0 +1,80 @@
+{
+  "type": "record",
+  "name": "DataEvent",
+  "namespace": "io.auroraforge.avro",
+  "doc": "Raw ingested event as published to the Kafka raw events topic. Schema version: 1.0. Compatibility: BACKWARD_TRANSITIVE — new optional fields only.",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "doc": "UUID v4 event identifier — corresponds to domain EventId"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "doc": "Kafka message key mirrors this field for partition locality"
+    },
+    {
+      "name": "sourceSystem",
+      "type": "string",
+      "doc": "Originating system identifier (e.g. crm-v2, erp-sap)"
+    },
+    {
+      "name": "eventType",
+      "type": "string",
+      "doc": "Business event type (e.g. ORDER_CREATED, PAYMENT_PROCESSED)"
+    },
+    {
+      "name": "classification",
+      "type": {
+        "type": "enum",
+        "name": "DataClassification",
+        "symbols": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"],
+        "doc": "Data sensitivity tier — governs encryption and retention"
+      }
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "EventStatus",
+        "symbols": ["RECEIVED", "VALIDATING", "ENCRYPTING", "ENCRYPTED", "PUBLISHED", "FAILED", "ARCHIVED"],
+        "doc": "Current processing lifecycle state"
+      }
+    },
+    {
+      "name": "schemaVersion",
+      "type": "string",
+      "default": "1.0",
+      "doc": "Schema version for backward compatibility tracking"
+    },
+    {
+      "name": "idempotencyKey",
+      "type": "string",
+      "doc": "Caller-supplied key for exactly-once deduplication"
+    },
+    {
+      "name": "metadata",
+      "type": {
+        "type": "map",
+        "values": "string"
+      },
+      "default": {},
+      "doc": "Arbitrary key-value metadata from the source system"
+    },
+    {
+      "name": "payloadSizeBytes",
+      "type": "int",
+      "default": 0,
+      "doc": "Original unencrypted payload size in bytes (for metrics; payload is NOT included)"
+    },
+    {
+      "name": "createdAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "UTC epoch milliseconds when the event was first received by the ingestion API"
+    }
+  ]
+}

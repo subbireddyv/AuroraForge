@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: auroraforge-processing
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9093,kafka-3:9094}
+    properties:
+      schema-registry-url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+    streams:
+      application-id: auroraforge-processing-streams
+      bootstrap-servers: ${spring.kafka.bootstrap-servers}
+      properties:
+        processing.guarantee: exactly_once_v2
+        num.stream.threads: 4
+        commit.interval.ms: 100
+        replication.factor: 3
+
+server:
+  port: ${SERVER_PORT:8082}
+  shutdown: graceful
+
+management:
+  server:
+    port: 8092
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+auroraforge:
+  kafka:
+    topic-prefix: auroraforge.events
+  spark:
+    master: ${SPARK_MASTER:spark://spark-master:7077}
+    app-jar: ${SPARK_APP_JAR:auroraforge-processing.jar}
+    driver-memory: ${SPARK_DRIVER_MEMORY:512m}
+    executor-memory: ${SPARK_EXECUTOR_MEMORY:1g}
+    executor-cores: ${SPARK_EXECUTOR_CORES:2}
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.apache.kafka.streams: WARN

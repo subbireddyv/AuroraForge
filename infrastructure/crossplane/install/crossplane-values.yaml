@@ -1,0 +1,56 @@
+# =============================================================================
+# Crossplane Helm values – production hardening
+# helm upgrade --install crossplane crossplane-stable/crossplane \
+#   --namespace crossplane-system --create-namespace \
+#   -f infrastructure/crossplane/install/crossplane-values.yaml
+# =============================================================================
+
+replicas: 2   # HA: two controller replicas
+
+rbacManager:
+  deploy: true
+  replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Metrics endpoint for Prometheus scraping
+metrics:
+  enabled: true
+
+# Leader election required when replicas > 1
+args:
+  - --enable-composition-functions=true
+  - --enable-composition-webhook=true
+
+# Run Crossplane on system nodes (tainted CriticalAddonsOnly)
+nodeSelector:
+  role: system
+
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+
+podAntiAffinity:
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app: crossplane
+
+# Security hardening
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop: [ALL]

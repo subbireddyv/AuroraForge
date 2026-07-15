@@ -1,0 +1,51 @@
+spring:
+  config:
+    activate:
+      on-profile: aws
+  kafka:
+    bootstrap-servers: ${AWS_MSK_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: AWS_MSK_IAM
+      sasl.jaas.config: software.amazon.msk.auth.iam.IAMLoginModule required;
+      sasl.client.callback.handler.class: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+
+auroraforge:
+  cloud:
+    provider: AWS
+    enable-multi-cloud: true
+    enable-cross-cloud-sync: true
+    primary-region: ${AWS_REGION:us-east-1}
+    secondary-region: ${AZURE_LOCATION:eastus}
+    failover-policy: AUTOMATIC
+
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    s3:
+      raw-bucket: ${AWS_S3_RAW_BUCKET}
+      processed-bucket: ${AWS_S3_PROCESSED_BUCKET}
+      backup-bucket: ${AWS_S3_BACKUP_BUCKET}
+    kms:
+      app-data-key-alias: ${AWS_KMS_APP_DATA_KEY_ALIAS:alias/auroraforge-app-data}
+
+  azure:
+    subscription-id: ${AZURE_SUBSCRIPTION_ID}
+    resource-group: ${AZURE_RESOURCE_GROUP}
+    location: ${AZURE_LOCATION:eastus}
+    cosmos:
+      endpoint: ${AZURE_COSMOS_ENDPOINT}
+      database-name: ${AZURE_COSMOS_DB_NAME:auroraforge}
+      container-name: ${AZURE_COSMOS_CONTAINER:events}
+
+  sync:
+    conflict-resolution:
+      strategy: VECTOR_CLOCK_LWW
+      lww-wall-clock-tolerance-ms: 500
+    polling:
+      interval-ms: 30000
+      batch-size: 500
+
+logging:
+  level:
+    io.auroraforge: INFO
+    software.amazon.awssdk: WARN

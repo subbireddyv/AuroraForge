@@ -1,0 +1,37 @@
+# =============================================================================
+# Kustomize Overlay – Azure / AKS
+# Adds: Workload Identity annotations, Azure-specific ConfigMaps
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  cloud: azure
+
+patches:
+  # Annotate ServiceAccount with Azure Workload Identity client ID
+  - target:
+      kind: ServiceAccount
+      name: auroraforge-app
+      namespace: auroraforge
+    patch: |-
+      - op: add
+        path: /metadata/annotations/azure.workload.identity~1client-id
+        value: $(AZURE_WORKLOAD_IDENTITY_CLIENT_ID)
+      - op: add
+        path: /metadata/labels/azure.workload.identity~1use
+        value: "true"
+
+configMapGenerator:
+  - name: cloud-config
+    namespace: auroraforge
+    literals:
+      - CLOUD_PROVIDER=azure
+      - AZURE_LOCATION=eastus
+      - COSMOS_DB_ENDPOINT=$(AZURE_COSMOS_DB_ENDPOINT)
+      - KEY_VAULT_URI=$(AZURE_KEY_VAULT_URI)
+      - KEY_VAULT_KEY_ID=$(AZURE_APP_DATA_KEY_ID)
+      - OTEL_EXPORTER_TYPE=otlp

@@ -1,0 +1,33 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url:      jdbc:postgresql://postgresql:5432/auroraforge
+    username: auroraforge
+    password: ${DB_PASSWORD:auroraforge}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle:      2
+      connection-timeout: 5000
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+auroraforge:
+  jwt:
+    rsa-key:
+      # Generate ephemeral key in docker-compose (no real KMS).
+      # For stable local dev, capture the logged base64 keys and pin them here.
+      generate-on-startup: true
+  security:
+    rate-limit:
+      tokens-per-minute: 120
+      burst-capacity:    20
+    token-blacklist:
+      enabled: true
+
+logging:
+  level:
+    io.auroraforge: DEBUG

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        AuroraForge Auth Service — Logback configuration.
+        Delegates profile-based appender selection to the shared base config.
+        The "service" MDC key is set here so every log line identifies its origin.
+    -->
+
+    <!-- Inject static service metadata into MDC for all log lines -->
+    <springProperty name="SERVICE_NAME"    source="spring.application.name"  defaultValue="auroraforge-auth"/>
+    <springProperty name="SERVICE_VERSION" source="spring.application.version" defaultValue="1.0.0-SNAPSHOT"/>
+
+    <property name="SERVICE" value="${SERVICE_NAME}"/>
+    <property name="VERSION" value="${SERVICE_VERSION}"/>
+
+    <!-- Shared appenders, profile-driven root logger, noise-reduction loggers -->
+    <include resource="logback-base.xml"/>
+
+    <!--
+        Service-level logger tuning.
+        Keep auth-related classes at DEBUG in dev so token validation failures
+        are visible without enabling the entire Spring Security debug flood.
+    -->
+    <springProfile name="dev">
+        <logger name="io.auroraforge.auth"              level="DEBUG"/>
+        <logger name="org.springframework.security.web" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod,staging">
+        <logger name="io.auroraforge.auth"              level="INFO"/>
+        <logger name="org.springframework.security"     level="WARN"/>
+    </springProfile>
+
+</configuration>

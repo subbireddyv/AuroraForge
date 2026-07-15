@@ -1,0 +1,57 @@
+##############################################################################
+# AuroraForge Ingestion – Docker Compose (local development) profile
+# Activated with: --spring.profiles.active=docker
+##############################################################################
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: jdbc:postgresql://postgresql:5432/auroraforge
+    username: auroraforge
+    password: ${POSTGRES_PASSWORD:auroraforge_dev}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+
+  kafka:
+    bootstrap-servers: kafka-1:9092,kafka-2:9093,kafka-3:9094
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_dev_password}
+
+  flyway:
+    url: jdbc:postgresql://postgresql:5432/auroraforge
+    user: auroraforge
+    password: ${POSTGRES_PASSWORD:auroraforge_dev}
+
+auroraforge:
+  cloud:
+    provider: LOCAL
+    enable-multi-cloud: false
+    enable-cross-cloud-sync: false
+
+  local:
+    minio:
+      endpoint: http://minio:9000
+      access-key: ${MINIO_ROOT_USER:minioadmin}
+      secret-key: ${MINIO_ROOT_PASSWORD:minioadmin}
+      bucket: auroraforge-raw
+
+  retention:
+    enable-auto-purge: false
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    io.auroraforge: DEBUG
+    org.apache.kafka: WARN

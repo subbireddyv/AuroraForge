@@ -1,0 +1,81 @@
+{
+  "type": "record",
+  "name": "WindowedAggregation",
+  "namespace": "io.auroraforge.avro",
+  "doc": "Per-tenant tumbling-window aggregation result. Emitted every 5 minutes to the aggregations topic. Used by the Grafana dashboard and the batch reconciliation job.",
+  "fields": [
+    {
+      "name": "tenantId",
+      "type": "string",
+      "doc": "Kafka message key"
+    },
+    {
+      "name": "windowStart",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "Inclusive window start epoch millis"
+    },
+    {
+      "name": "windowEnd",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "Exclusive window end epoch millis"
+    },
+    {
+      "name": "windowDurationMs",
+      "type": "long",
+      "doc": "Window size in milliseconds (300000 = 5 minutes)"
+    },
+    {
+      "name": "totalEventCount",
+      "type": "long",
+      "default": 0,
+      "doc": "Total events received in this window across all classifications"
+    },
+    {
+      "name": "countByClassification",
+      "type": { "type": "map", "values": "long" },
+      "default": {},
+      "doc": "Event count keyed by DataClassification enum name"
+    },
+    {
+      "name": "countByEventType",
+      "type": { "type": "map", "values": "long" },
+      "default": {},
+      "doc": "Event count keyed by eventType string (top-N event types)"
+    },
+    {
+      "name": "totalPayloadBytes",
+      "type": "long",
+      "default": 0,
+      "doc": "Sum of payloadSizeBytes for all events in this window"
+    },
+    {
+      "name": "anomalyCount",
+      "type": "long",
+      "default": 0,
+      "doc": "Number of events flagged with anomalyDetected=true in this window"
+    },
+    {
+      "name": "dlqCount",
+      "type": "long",
+      "default": 0,
+      "doc": "Events routed to DLQ in this window"
+    },
+    {
+      "name": "p50LatencyMs",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "p50 enrichment latency for this window (null if no events)"
+    },
+    {
+      "name": "p99LatencyMs",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "p99 enrichment latency for this window (null if no events)"
+    },
+    {
+      "name": "computedAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "When this aggregation record was emitted"
+    }
+  ]
+}

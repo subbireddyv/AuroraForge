@@ -1,0 +1,64 @@
+spring:
+  config:
+    activate:
+      on-profile: azure
+  kafka:
+    bootstrap-servers: ${AZURE_EVENTHUB_NAMESPACE}.servicebus.windows.net:9093
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: PLAIN
+      sasl.jaas.config: >
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="$ConnectionString"
+        password="${AZURE_EVENTHUB_CONNECTION_STRING}";
+
+auroraforge:
+  cloud:
+    provider: AZURE
+    enable-multi-cloud: true
+    enable-cross-cloud-sync: true
+    primary-region: ${AZURE_LOCATION:eastus}
+    secondary-region: ${AWS_REGION:us-east-1}
+    failover-policy: AUTOMATIC
+
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    s3:
+      raw-bucket: ${AWS_S3_RAW_BUCKET}
+      backup-bucket: ${AWS_S3_BACKUP_BUCKET}
+    kms:
+      app-data-key-alias: ${AWS_KMS_APP_DATA_KEY_ALIAS:alias/auroraforge-app-data}
+
+  azure:
+    subscription-id: ${AZURE_SUBSCRIPTION_ID}
+    resource-group: ${AZURE_RESOURCE_GROUP}
+    location: ${AZURE_LOCATION:eastus}
+    secondary-location: ${AZURE_SECONDARY_LOCATION:westus2}
+    keyvault:
+      uri: ${AZURE_KEY_VAULT_URI}
+      key-name: ${AZURE_KEY_VAULT_KEY_NAME:auroraforge-app-key}
+      key-version: ${AZURE_KEY_VAULT_KEY_VERSION:}
+    cosmos:
+      endpoint: ${AZURE_COSMOS_ENDPOINT}
+      database-name: ${AZURE_COSMOS_DB_NAME:auroraforge}
+      container-name: ${AZURE_COSMOS_CONTAINER:events}
+      consistency-level: BoundedStaleness
+      enable-analytical-storage: true
+    blob:
+      account-name: ${AZURE_STORAGE_ACCOUNT}
+      raw-container: raw
+      processed-container: processed
+      backup-container: backup
+
+  sync:
+    conflict-resolution:
+      strategy: VECTOR_CLOCK_LWW
+      lww-wall-clock-tolerance-ms: 500
+    polling:
+      interval-ms: 30000
+      batch-size: 500
+
+logging:
+  level:
+    io.auroraforge: INFO
+    com.azure: WARN

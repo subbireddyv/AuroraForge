@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AuroraForge shared Logback configuration.
+
+    Service logback-spring.xml files include this via:
+        <include resource="logback-base.xml"/>
+
+    Profile-driven appender selection:
+        default / dev   → CONSOLE (human-readable colored output)
+        prod, staging   → ASYNC_JSON (structured JSON to stdout for log shipping)
+        always          → AUDIT_APPENDER (separate audit.log with rolling policy)
+
+    MDC fields surfaced in every log line:
+        requestId, tenantId, userId, traceId, spanId, service, version
+-->
+<included>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PROPERTIES
+         ═══════════════════════════════════════════════════════ -->
+    <property name="LOG_DIR"        value="${LOG_DIR:-logs}"/>
+    <property name="MAX_HISTORY"    value="${LOG_MAX_HISTORY:-30}"/>
+    <property name="MAX_FILE_SIZE"  value="${LOG_MAX_FILE_SIZE:-100MB}"/>
+    <property name="TOTAL_CAP"      value="${LOG_TOTAL_SIZE_CAP:-3GB}"/>
+
+    <!-- ═══════════════════════════════════════════════════════
+         CONSOLE APPENDER (dev / default)
+         Human-readable, colored, includes MDC fields
+         ═══════════════════════════════════════════════════════ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:-}){magenta} %clr(---){faint}
+                %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint}
+                %m [reqId=%X{requestId:-–} tenant=%X{tenantId:-–} trace=%X{traceId:-–}]%n%ex
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- ═══════════════════════════════════════════════════════
+         JSON APPENDER (prod / staging)
+         Structured Logstash-compatible JSON to stdout.
+         Kubernetes/ECS scrapes this directly for Elasticsearch.
+         ═══════════════════════════════════════════════════════ -->
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Standard Logstash fields -->
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <!-- Propagate all MDC entries as top-level JSON fields -->
+            <includeMdcKeyName>requestId</includeMdcKeyName>
+            <includeMdcKeyName>tenantId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <includeMdcKeyName>service</includeMdcKeyName>
+            <includeMdcKeyName>version</includeMdcKeyName>
+            <!-- Mask sensitive fields appearing in message bodies -->
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>****</defaultMask>
+                <valueMask>
+                    <value>"password"\s*:\s*"[^"]*"</value>
+                    <mask>"password":"****"</mask>
+                </valueMask>
+                <valueMask>
+                    <value>"token"\s*:\s*"[^"]*"</value>
+                    <mask>"token":"****"</mask>
+                </valueMask>
+                <valueMask>
+                    <value>"secret"\s*:\s*"[^"]*"</value>
+                    <mask>"secret":"****"</mask>
+                </valueMask>
+            </jsonGeneratorDecorator>
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerCause>8</maxDepthPerCause>
+                <shortenedClassNameLength>30</shortenedClassNameLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+        </encoder>
+    </appender>
+
+    <!-- Async wrapper — decouples application threads from I/O -->
+    <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="JSON_STDOUT"/>
+        <queueSize>2048</queueSize>
+        <discardingThreshold>0</discardingThreshold>   <!-- never silently drop -->
+        <includeCallerData>false</includeCallerData>    <!-- performance: skip stack walk -->
+        <maxFlushTime>5000</maxFlushTime>
+    </appender>
+
+    <!-- ═══════════════════════════════════════════════════════
+         ROLLING FILE APPENDER (optional file sink)
+         Active in the "file" Spring profile.
+         ═══════════════════════════════════════════════════════ -->
+    <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/auroraforge.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/auroraforge-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_CAP}</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    </appender>
+
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="ROLLING_FILE"/>
+        <queueSize>2048</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+
+    <!-- ═══════════════════════════════════════════════════════
+         AUDIT APPENDER (separate file, never async-dropped)
+         Routes AUDIT logger to its own rolling file so audit
+         records survive application restarts and are isolated
+         from operational logs for compliance export.
+         ═══════════════════════════════════════════════════════ -->
+    <appender name="AUDIT_APPENDER" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/audit-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>90</maxHistory>          <!-- 90-day retention for compliance -->
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+            </fieldNames>
+        </encoder>
+        <!-- Prudent mode prevents data loss from concurrent JVM writes in rolling -->
+        <prudent>false</prudent>
+    </appender>
+
+    <!-- ── Dedicated audit logger — additivity=false keeps records out of root ── -->
+    <logger name="AUDIT" level="INFO" additivity="false">
+        <appender-ref ref="AUDIT_APPENDER"/>
+    </logger>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PROFILE-DRIVEN ROOT LOGGER SELECTION
+         ═══════════════════════════════════════════════════════ -->
+
+    <!-- Production / Staging: structured JSON only -->
+    <springProfile name="prod,staging">
+        <root level="INFO">
+            <appender-ref ref="ASYNC_JSON"/>
+        </root>
+    </springProfile>
+
+    <!-- File profile: JSON stdout + rolling file -->
+    <springProfile name="file">
+        <root level="INFO">
+            <appender-ref ref="ASYNC_JSON"/>
+            <appender-ref ref="ASYNC_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- Default / dev: human-readable console -->
+    <springProfile name="!prod &amp; !staging &amp; !file">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ═══════════════════════════════════════════════════════
+         THIRD-PARTY NOISE REDUCTION
+         ═══════════════════════════════════════════════════════ -->
+    <logger name="org.apache.kafka"                     level="WARN"/>
+    <logger name="org.springframework.kafka"            level="WARN"/>
+    <logger name="software.amazon.awssdk"               level="WARN"/>
+    <logger name="com.azure"                            level="WARN"/>
+    <logger name="org.hibernate.SQL"                    level="WARN"/>
+    <logger name="org.hibernate.orm.deprecation"        level="ERROR"/>
+    <logger name="io.netty"                             level="WARN"/>
+    <logger name="org.apache.spark"                     level="WARN"/>
+    <logger name="org.eclipse.jetty"                    level="WARN"/>
+    <logger name="io.github.resilience4j"               level="INFO"/>
+
+</included>

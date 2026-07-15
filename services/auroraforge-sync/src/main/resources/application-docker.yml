@@ -1,0 +1,25 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+  kafka:
+    bootstrap-servers: kafka-1:9092,kafka-2:9093,kafka-3:9094
+
+auroraforge:
+  cloud:
+    provider: LOCAL
+    enable-multi-cloud: false
+    enable-cross-cloud-sync: false
+
+  sync:
+    conflict-resolution:
+      strategy: VECTOR_CLOCK_LWW
+      lww-wall-clock-tolerance-ms: 1000
+    polling:
+      interval-ms: 5000
+      batch-size: 100
+
+logging:
+  level:
+    io.auroraforge: DEBUG
+    io.minio: WARN

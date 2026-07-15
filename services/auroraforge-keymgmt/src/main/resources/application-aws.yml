@@ -1,0 +1,35 @@
+spring:
+  config:
+    activate:
+      on-profile: aws
+  datasource:
+    url:      jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:auroraforge}
+    username: ${DB_USER:auroraforge}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle:      2
+      connection-timeout: 5000
+
+auroraforge:
+  cloud:
+    provider: AWS
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    kms:
+      app-data-key-alias:   ${AWS_KMS_APP_DATA_KEY_ALIAS:alias/auroraforge-app-data}
+      rds-key-alias:        ${AWS_KMS_RDS_KEY_ALIAS:alias/auroraforge-rds}
+      s3-key-alias:         ${AWS_KMS_S3_KEY_ALIAS:alias/auroraforge-s3}
+      cloudwatch-key-alias: ${AWS_KMS_CW_KEY_ALIAS:alias/auroraforge-cloudwatch}
+
+  keymgmt:
+    # Encryption context is cryptographically bound to ciphertext — do NOT change
+    # these values without first re-encrypting all existing data.
+    encryption-context-version: "v1"
+    rotation:
+      data-key-rotation-days: 90
+
+logging:
+  level:
+    io.auroraforge:                       INFO
+    software.amazon.awssdk.services.kms:  WARN

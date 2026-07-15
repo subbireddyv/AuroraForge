@@ -1,0 +1,54 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auroraforge-auth-pdb
+  namespace: auroraforge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auroraforge-auth
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auroraforge-ingestion-pdb
+  namespace: auroraforge
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auroraforge-ingestion
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auroraforge-processing-pdb
+  namespace: auroraforge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auroraforge-processing
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auroraforge-sync-pdb
+  namespace: auroraforge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auroraforge-sync
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auroraforge-keymgmt-pdb
+  namespace: auroraforge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auroraforge-keymgmt

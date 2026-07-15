@@ -1,0 +1,75 @@
+# =============================================================================
+# Prometheus Scrape Configuration – AuroraForge Local Dev Stack
+# =============================================================================
+
+global:
+  scrape_interval:     30s
+  evaluation_interval: 30s
+  scrape_timeout:      10s
+  external_labels:
+    cluster: local
+    environment: dev
+    project: auroraforge
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []   # Add Alertmanager when configured
+
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  # OpenTelemetry Collector (collector self-metrics + aggregated app metrics)
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:8888]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: otelcol_(.+)
+        target_label: __name__
+        replacement: otel_$1
+
+  # OTel Collector metrics exporter endpoint (app metrics forwarded by the collector)
+  - job_name: auroraforge-apps
+    static_configs:
+      - targets: [otel-collector:8889]
+    honor_labels: true  # Preserve labels injected by the collector
+
+  # Kafka brokers via JMX exporter
+  - job_name: kafka
+    static_configs:
+      - targets:
+          - kafka-1:9999
+          - kafka-2:9999
+          - kafka-3:9999
+    metric_relabel_configs:
+      # Drop high-cardinality partition-level metrics for local dev
+      - source_labels: [__name__]
+        regex: kafka_log_log_(.+)
+        action: drop
+
+  # PostgreSQL exporter (run as sidecar or separate container in prod)
+  - job_name: postgresql
+    static_configs:
+      - targets: [postgresql:9187]
+
+  # Redis exporter
+  - job_name: redis
+    static_configs:
+      - targets: [redis:9121]
+
+  # Spark master and workers
+  - job_name: spark
+    static_configs:
+      - targets:
+          - spark-master:8080
+          - spark-worker-1:8081
+          - spark-worker-2:8081
+    metrics_path: /metrics/prometheus

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        AuroraForge Sync Service — Logback configuration.
+        This service drives cross-cloud replication, DR state transitions, and
+        DLQ retry.  DR state-change logs (WARN/ERROR from DisasterRecoveryCoordinator
+        and ReplicationLagMonitor) are critical for on-call alerting — keep INFO
+        for the whole io.auroraforge.sync package in all profiles.
+    -->
+
+    <springProperty name="SERVICE_NAME"    source="spring.application.name"    defaultValue="auroraforge-sync"/>
+    <springProperty name="SERVICE_VERSION" source="spring.application.version"  defaultValue="1.0.0-SNAPSHOT"/>
+
+    <property name="SERVICE" value="${SERVICE_NAME}"/>
+    <property name="VERSION" value="${SERVICE_VERSION}"/>
+
+    <include resource="logback-base.xml"/>
+
+    <!-- AWS / Azure SDK noise during normal replication -->
+    <logger name="software.amazon.awssdk.services.s3"   level="WARN"/>
+    <logger name="software.amazon.awssdk.services.rds"  level="WARN"/>
+    <logger name="com.azure.cosmos"                     level="WARN"/>
+    <logger name="com.azure.storage.blob"               level="WARN"/>
+
+    <!-- JPA / Flyway during startup migrations -->
+    <logger name="org.flywaydb"                         level="INFO"/>
+    <logger name="org.hibernate.SQL"                    level="WARN"/>
+
+    <springProfile name="dev">
+        <logger name="io.auroraforge.sync"              level="DEBUG"/>
+        <logger name="org.hibernate.SQL"                level="DEBUG"/>
+        <logger name="org.hibernate.type.descriptor"    level="TRACE"/>
+    </springProfile>
+
+    <springProfile name="prod,staging">
+        <logger name="io.auroraforge.sync"              level="INFO"/>
+    </springProfile>
+
+</configuration>

@@ -1,0 +1,49 @@
+spring:
+  config:
+    activate:
+      on-profile: aws
+  kafka:
+    bootstrap-servers: ${AWS_MSK_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: AWS_MSK_IAM
+      sasl.jaas.config: software.amazon.msk.auth.iam.IAMLoginModule required;
+      sasl.client.callback.handler.class: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+    streams:
+      bootstrap-servers: ${AWS_MSK_BOOTSTRAP_SERVERS}
+      properties:
+        security.protocol: SASL_SSL
+        sasl.mechanism: AWS_MSK_IAM
+        sasl.jaas.config: software.amazon.msk.auth.iam.IAMLoginModule required;
+        sasl.client.callback.handler.class: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+
+auroraforge:
+  cloud:
+    provider: AWS
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    s3:
+      spark-checkpoints-bucket: ${AWS_S3_SPARK_BUCKET}
+      processed-bucket: ${AWS_S3_PROCESSED_BUCKET}
+
+  spark:
+    master: ${SPARK_MASTER_URL}
+    app-name: auroraforge-processing-aws
+    deploy-mode: cluster
+    jars:
+      - s3://${AWS_S3_SPARK_BUCKET}/jars/auroraforge-processing.jar
+    config:
+      spark.sql.shuffle.partitions: "200"
+      spark.executor.memory: "4g"
+      spark.executor.cores: "4"
+      spark.executor.instances: "10"
+      spark.kubernetes.container.image: ${SPARK_IMAGE}
+      spark.kubernetes.namespace: auroraforge-spark
+      spark.kubernetes.authenticate.serviceAccountName: auroraforge-spark-sa
+      spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.WebIdentityTokenCredentialsProvider
+      spark.checkpoint.dir: s3a://${AWS_S3_SPARK_BUCKET}/checkpoints/
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.apache.spark: WARN

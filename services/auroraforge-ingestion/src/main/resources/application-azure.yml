@@ -1,0 +1,114 @@
+##############################################################################
+# AuroraForge Ingestion – Azure (AKS) profile
+# Activated with: --spring.profiles.active=azure
+# Credentials: Workload Identity via OIDC federated credential on the K8s SA
+##############################################################################
+spring:
+  config:
+    activate:
+      on-profile: azure
+
+  datasource:
+    # Azure Database for PostgreSQL Flexible Server
+    url: jdbc:postgresql://${AZURE_PG_HOST}:5432/${AZURE_PG_DB:auroraforge}?sslmode=require
+    username: ${AZURE_PG_USERNAME}
+    password: ${AZURE_PG_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+      validation-timeout: 3000
+      keepalive-time: 60000
+      max-lifetime: 1800000
+
+  kafka:
+    # Azure Event Hubs for Kafka — compatible API
+    bootstrap-servers: ${AZURE_EVENTHUB_NAMESPACE}.servicebus.windows.net:9093
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: PLAIN
+      sasl.jaas.config: >
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="$ConnectionString"
+        password="${AZURE_EVENTHUB_CONNECTION_STRING}";
+
+  data:
+    redis:
+      # Azure Cache for Redis with TLS
+      host: ${AZURE_REDIS_HOST}
+      port: 6380
+      password: ${AZURE_REDIS_PASSWORD}
+      ssl:
+        enabled: true
+      timeout: 2000
+
+  flyway:
+    url: jdbc:postgresql://${AZURE_PG_HOST}:5432/${AZURE_PG_DB:auroraforge}?sslmode=require
+    user: ${AZURE_PG_USERNAME}
+    password: ${AZURE_PG_PASSWORD}
+    out-of-order: false
+    validate-on-migrate: true
+
+auroraforge:
+  cloud:
+    provider: AZURE
+    enable-multi-cloud: true
+    enable-cross-cloud-sync: true
+    primary-region: ${AZURE_LOCATION:eastus}
+    secondary-region: ${AZURE_SECONDARY_LOCATION:westus2}
+    failover-policy: AUTOMATIC
+
+  azure:
+    subscription-id: ${AZURE_SUBSCRIPTION_ID}
+    resource-group: ${AZURE_RESOURCE_GROUP:auroraforge-rg}
+    location: ${AZURE_LOCATION:eastus}
+    secondary-location: ${AZURE_SECONDARY_LOCATION:westus2}
+    keyvault:
+      uri: ${AZURE_KEY_VAULT_URI}
+      key-name: ${AZURE_KEY_VAULT_KEY_NAME:auroraforge-app-key}
+      key-version: ${AZURE_KEY_VAULT_KEY_VERSION:}
+      use-hsm: true
+    cosmos:
+      endpoint: ${AZURE_COSMOS_ENDPOINT}
+      database-name: ${AZURE_COSMOS_DB_NAME:auroraforge}
+      container-name: ${AZURE_COSMOS_CONTAINER:events}
+      consistency-level: BoundedStaleness
+      enable-analytical-storage: true
+      request-units-per-second: 4000
+    blob:
+      account-name: ${AZURE_STORAGE_ACCOUNT}
+      raw-container: raw
+      processed-container: processed
+      backup-container: backup
+      block-size-mb: 50
+    aks:
+      cluster-name: ${AZURE_AKS_CLUSTER_NAME:auroraforge-aks}
+      managed-identity-client-id: ${AZURE_CLIENT_ID}
+      tenant-id: ${AZURE_TENANT_ID}
+      oidc-issuer-url: ${AZURE_OIDC_ISSUER_URL}
+
+  kafka:
+    prefix: auroraforge
+    default-replication-factor: 3
+    default-min-insync-replicas: 2
+
+  retention:
+    enable-auto-purge: true
+    purge-schedule-cron-seconds: 3600
+    purge-max-batch-size: 500
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
+otel:
+  exporter:
+    otlp:
+      endpoint: ${OTEL_COLLECTOR_ENDPOINT:http://otel-collector.observability.svc.cluster.local:4317}
+
+logging:
+  level:
+    io.auroraforge: INFO
+    org.apache.kafka: WARN
+    com.azure: WARN

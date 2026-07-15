@@ -1,0 +1,48 @@
+spring:
+  config:
+    activate:
+      on-profile: azure
+  datasource:
+    url:      jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:auroraforge}
+    username: ${DB_USER:auroraforge}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle:      5
+      connection-timeout: 5000
+  data:
+    redis:
+      host:     ${REDIS_HOST}
+      port:     ${REDIS_PORT:6380}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+
+auroraforge:
+  cloud:
+    provider: AZURE
+  jwt:
+    issuer: ${JWT_ISSUER:https://auth.auroraforge.io}
+    rsa-key:
+      generate-on-startup: false
+      # Azure Key Vault secret storing JSON: {"privateKey":"<b64>","publicKey":"<b64>"}
+      key-vault-secret-name: ${JWT_KEY_VAULT_SECRET_NAME:auroraforge-jwt-rsa-key}
+      key-id: ${JWT_KEY_ID:auroraforge-auth-key-1}
+  azure:
+    keyvault:
+      uri: ${AZURE_KEY_VAULT_URI}
+  security:
+    cors:
+      allowed-origins:
+        - ${CORS_ORIGIN:https://app.auroraforge.io}
+      allow-credentials: true
+    rate-limit:
+      tokens-per-minute: 60
+      burst-capacity: 10
+    token-blacklist:
+      enabled: true
+
+logging:
+  level:
+    io.auroraforge:              INFO
+    com.azure.security.keyvault: WARN

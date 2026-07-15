@@ -1,0 +1,68 @@
+# =============================================================================
+# XRD – Cloud-Agnostic Object Storage
+# Maps to AWS S3 on AWS, Azure Blob Storage on Azure.
+# =============================================================================
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xobjectstores.platform.auroraforge.io
+spec:
+  group: platform.auroraforge.io
+  names:
+    kind: XObjectStore
+    plural: xobjectstores
+  claimNames:
+    kind: ObjectStore
+    plural: objectstores
+
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XObjectStore
+
+  defaultCompositionRef:
+    name: storage-aws
+
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [parameters]
+              properties:
+                parameters:
+                  type: object
+                  required: [bucketPurpose, environmentType]
+                  properties:
+                    bucketPurpose:
+                      type: string
+                      description: "Logical purpose of the bucket (raw, processed, archive, checkpoints)."
+                      enum: [raw, processed, archive, checkpoints]
+                    environmentType:
+                      type: string
+                      enum: [dev, staging, prod]
+                    versioning:
+                      type: boolean
+                      description: "Enable object versioning."
+                      default: true
+                    encryptionKeyRef:
+                      type: string
+                      description: "Name of the KMS key alias / Key Vault key to use for SSE-KMS."
+                    retentionDays:
+                      type: integer
+                      description: "Days before objects transition to cheaper storage tier."
+                      default: 30
+                    region:
+                      type: string
+
+            status:
+              type: object
+              properties:
+                bucketName:
+                  type: string
+                endpoint:
+                  type: string

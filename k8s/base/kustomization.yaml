@@ -1,0 +1,27 @@
+# =============================================================================
+# Kustomize Base – cloud-agnostic manifests
+# Overlays (aws/, azure/) add cloud-specific patches on top of this base.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - service-accounts/service-accounts.yaml
+  - configmaps/app-config.yaml
+  - deployments/auth-deployment.yaml
+  - deployments/ingestion-deployment.yaml
+  - deployments/processing-deployment.yaml
+  - deployments/sync-deployment.yaml
+  - deployments/keymgmt-deployment.yaml
+  - services/services.yaml
+  - hpa/hpa.yaml
+  - pdb/pdb.yaml
+  - ingress/ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: auroraforge
+  app.kubernetes.io/managed-by: kustomize
+
+commonAnnotations:
+  team: platform

@@ -1,0 +1,185 @@
+# =============================================================================
+# Composition – AWS Database (RDS PostgreSQL)
+# Selected when: compositionSelector label cloud=aws matches on the XDatabase.
+#
+# Pipeline:
+#  1. Create DB subnet group (references existing Terraform-managed subnets)
+#  2. Create RDS parameter group with CDC settings
+#  3. Create RDS instance (encrypted, Multi-AZ for prod)
+#  4. Patch status.endpoint from the provisioned RDS address
+# =============================================================================
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: database-aws
+  labels:
+    cloud: aws
+    engine: postgresql
+  annotations:
+    crossplane.io/description: "Provisions an RDS PostgreSQL instance on AWS"
+spec:
+  compositeTypeRef:
+    apiVersion: platform.auroraforge.io/v1alpha1
+    kind: XDatabase
+
+  # Pipeline mode: supports ordered transforms and patching
+  mode: Pipeline
+  pipeline:
+
+    # ---- Step 1: RDS DB Subnet Group ----------------------------------------
+    - step: provision-subnet-group
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds-subnet-group
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: SubnetGroup
+              spec:
+                forProvider:
+                  region: us-east-1
+                  description: "AuroraForge XDatabase managed subnet group"
+                  # Subnet IDs are injected from the platform EnvironmentConfig
+                  subnetIdSelector:
+                    matchLabels:
+                      access: private
+                providerConfigRef:
+                  name: auroraforge-aws
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+                transforms:
+                  - type: map
+                    map:
+                      "": "us-east-1"  # Default region
+
+    # ---- Step 2: RDS Parameter Group ----------------------------------------
+    - step: provision-parameter-group
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds-parameter-group
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: ParameterGroup
+              spec:
+                forProvider:
+                  region: us-east-1
+                  family: postgres16
+                  description: "Managed by Crossplane XDatabase"
+                  parameter:
+                    - name: wal_level
+                      value: logical
+                    - name: max_replication_slots
+                      value: "10"
+                    - name: max_wal_senders
+                      value: "10"
+                    - name: shared_preload_libraries
+                      value: pg_stat_statements
+                providerConfigRef:
+                  name: auroraforge-aws
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+
+    # ---- Step 3: RDS Instance -----------------------------------------------
+    - step: provision-rds-instance
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds-instance
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: Instance
+              spec:
+                forProvider:
+                  region: us-east-1
+                  engine: postgres
+                  engineVersion: "16.1"
+                  instanceClass: db.r6g.large
+                  storageType: gp3
+                  storageEncrypted: true
+                  kmsKeyIdSelector:
+                    matchLabels:
+                      usage: rds
+                  multiAz: false   # Overridden to true for prod by patch below
+                  publiclyAccessible: false
+                  autoMinorVersionUpgrade: true
+                  backupRetentionPeriod: 30
+                  deletionProtection: true
+                  enabledCloudwatchLogsExports:
+                    - postgresql
+                    - upgrade
+                  performanceInsightsEnabled: true
+                  dbSubnetGroupNameSelector:
+                    matchControllerRef: true
+                  parameterGroupNameSelector:
+                    matchControllerRef: true
+                  username: auroraforge_xdb
+                  # Password injected via GenerateSecret function
+                  passwordSecretRef:
+                    key: password
+                providerConfigRef:
+                  name: auroraforge-aws
+                writeConnectionSecretsToNamespace: crossplane-system
+            patches:
+              # Map environmentType → instance class
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.environmentType
+                toFieldPath: spec.forProvider.instanceClass
+                transforms:
+                  - type: map
+                    map:
+                      dev:     "db.t4g.medium"
+                      staging: "db.r6g.large"
+                      prod:    "db.r6g.xlarge"
+
+              # Enable Multi-AZ only in prod
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.environmentType
+                toFieldPath: spec.forProvider.multiAz
+                transforms:
+                  - type: map
+                    map:
+                      dev:     "false"
+                      staging: "false"
+                      prod:    "true"
+                  - type: convert
+                    convert:
+                      toType: bool
+
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.storageGb
+                toFieldPath: spec.forProvider.allocatedStorage
+
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.backupRetentionDays
+                toFieldPath: spec.forProvider.backupRetentionPeriod
+
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.deletionProtection
+                toFieldPath: spec.forProvider.deletionProtection
+
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+
+              # Patch status.endpoint from the provisioned RDS endpoint
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.endpoint
+                toFieldPath: status.endpoint
+
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.port
+                toFieldPath: status.port

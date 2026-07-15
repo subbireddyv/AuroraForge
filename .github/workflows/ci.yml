@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  MVN_OPTS: "-Xmx2g -XX:+UseZGC --enable-preview"
+
+jobs:
+  # ── Build + unit tests ─────────────────────────────────────────────────────
+  build:
+    name: Build & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build and run unit tests
+        env:
+          MAVEN_OPTS: ${{ env.MVN_OPTS }}
+        run: |
+          mvn -f services/pom.xml \
+            clean verify \
+            -DskipITs \
+            -T 1C \
+            --no-transfer-progress
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: services/**/target/surefire-reports/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-jars
+          path: services/**/target/*.jar
+          retention-days: 1
+
+  # ── Architecture fitness tests ──────────────────────────────────────────────
+  arch-tests:
+    name: Architecture Tests (ArchUnit)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Run ArchUnit tests
+        env:
+          MAVEN_OPTS: ${{ env.MVN_OPTS }}
+        run: |
+          mvn -f services/pom.xml test \
+            -Dtest="*ArchTest" \
+            --no-transfer-progress
+
+  # ── Integration tests (Testcontainers) ────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    services:
+      # Kafka is spun up by Testcontainers — no explicit docker-compose needed
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: service-jars
+          path: services
+
+      - name: Run integration tests
+        env:
+          MAVEN_OPTS: ${{ env.MVN_OPTS }}
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          mvn -f services/pom.xml verify \
+            -Pfailsafe \
+            -DskipUTs \
+            --no-transfer-progress
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: services/**/target/failsafe-reports/
+
+  # ── Docker image build (on main branch only) ───────────────────────────────
+  build-images:
+    name: Build OCI Images
+    runs-on: ubuntu-latest
+    needs: [build, arch-tests, integration-tests]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build OCI images (Paketo Buildpacks)
+        env:
+          MAVEN_OPTS: ${{ env.MVN_OPTS }}
+        run: |
+          mvn -f services/pom.xml spring-boot:build-image \
+            -DskipTests \
+            --no-transfer-progress
+
+      - name: Tag images with commit SHA
+        run: |
+          VERSION=${{ github.sha }}
+          for SVC in auth ingestion processing sync keymgmt; do
+            docker tag auroraforge/auroraforge-${SVC}:1.0.0-SNAPSHOT \
+                       auroraforge/auroraforge-${SVC}:${VERSION:0:7}
+          done
+
+  # ── Security scan ──────────────────────────────────────────────────────────
+  security-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Run OWASP Dependency Check
+        env:
+          MAVEN_OPTS: ${{ env.MVN_OPTS }}
+        run: |
+          mvn -f services/pom.xml \
+            org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=9 \
+            --no-transfer-progress
+        continue-on-error: true   # report but don't block PRs
+
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check
+          path: services/**/target/dependency-check-report.html
+
+  # ── Terraform validate ────────────────────────────────────────────────────
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud: [aws, azure]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Init & Validate (${{ matrix.cloud }})
+        run: |
+          cd infrastructure/terraform/${{ matrix.cloud }}
+          cp terraform.tfvars.example terraform.tfvars
+          terraform init -backend=false
+          terraform validate

@@ -1,0 +1,38 @@
+# =============================================================================
+# Crossplane AWS Provider
+# Install via: kubectl apply -f infrastructure/crossplane/providers/aws-provider.yaml
+# Requires Crossplane >= 1.15 installed on the cluster.
+# =============================================================================
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws
+  annotations:
+    crossplane.io/description: "AWS provider for AuroraForge cloud-agnostic resources"
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws:v0.47.0
+  packagePullPolicy: IfNotPresent
+  revisionActivationPolicy: Automatic
+  revisionHistoryLimit: 3
+  controllerConfigRef:
+    name: aws-provider-controller-config
+
+---
+apiVersion: pkg.crossplane.io/v1alpha1
+kind: ControllerConfig
+metadata:
+  name: aws-provider-controller-config
+spec:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Run provider controller in the crossplane-system namespace
+  nodeSelector:
+    role: system
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
