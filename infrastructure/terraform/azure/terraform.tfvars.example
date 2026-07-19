@@ -19,3 +19,6 @@ cosmos_db_secondary_region  = "westus2"
 
 key_vault_sku                        = "premium"
 key_vault_soft_delete_retention_days = 90
+
+ops_email            = "ops@your-domain.com"
+alerting_webhook_url = "https://events.pagerduty.com/v2/enqueue"

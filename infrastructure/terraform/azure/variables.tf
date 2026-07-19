@@ -106,6 +106,18 @@ variable "cosmos_db_secondary_region" {
 }
 
 # --- Key Vault ---
+variable "ops_email" {
+  description = "Email address for operational alerts (PagerDuty/on-call)."
+  type        = string
+  default     = "ops@example.com"
+}
+
+variable "alerting_webhook_url" {
+  description = "Webhook URL for alert routing (e.g. PagerDuty Events API v2 or Slack)."
+  type        = string
+  default     = "https://events.pagerduty.com/v2/enqueue"
+}
+
 variable "key_vault_sku" {
   description = "Key Vault SKU: standard or premium (premium supports HSM-backed keys)."
   type        = string

@@ -142,7 +142,7 @@ resource "azurerm_cosmosdb_sql_container" "aggregates" {
   # Custom conflict resolution: resolved by ConflictResolverService via stored procedure
   conflict_resolution_policy {
     mode                             = "Custom"
-    conflict_resolution_procedure_id = azurerm_cosmosdb_sql_stored_procedure.conflict_resolver.name
+    conflict_resolution_procedure = azurerm_cosmosdb_sql_stored_procedure.conflict_resolver.name
   }
 
   unique_key {

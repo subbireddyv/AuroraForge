@@ -194,6 +194,13 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- ── Flyway (flyway-database-postgresql not in Spring Boot BOM; added in Flyway 10) ── -->
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+
             <!-- ── Kafka ── -->
             <dependency>
                 <groupId>io.confluent</groupId>
