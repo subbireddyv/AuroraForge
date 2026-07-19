@@ -42,7 +42,3 @@ output "app_workload_identity_client_id" {
   value       = azurerm_user_assigned_identity.app_workload.client_id
 }
 
-output "log_analytics_workspace_id" {
-  description = "Log Analytics workspace ID for Azure Monitor integration."
-  value       = azurerm_log_analytics_workspace.aks.id
-}

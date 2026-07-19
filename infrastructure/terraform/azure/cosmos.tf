@@ -95,8 +95,14 @@ resource "azurerm_cosmosdb_sql_container" "events" {
     excluded_path { path = "/_etag/?" }
 
     composite_index {
-      index { path = "/tenantId"; order = "Ascending" }
-      index { path = "/eventTime"; order = "Descending" }
+      index {
+        path  = "/tenantId"
+        order = "Ascending"
+      }
+      index {
+        path  = "/eventTime"
+        order = "Descending"
+      }
     }
   }
 

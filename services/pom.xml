@@ -60,7 +60,7 @@
 
         <!-- Cloud SDKs -->
         <aws-sdk.version>2.25.27</aws-sdk.version>
-        <azure-sdk.version>1.2.22</azure-sdk.version>
+        <azure-sdk.version>5.14.0</azure-sdk.version>
 
         <!-- Mapping / Validation -->
         <mapstruct.version>1.5.5.Final</mapstruct.version>
