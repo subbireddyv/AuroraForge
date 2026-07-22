@@ -92,7 +92,7 @@ resource "aws_iam_policy" "ingestion" {
         Sid    = "SecretsRead"
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-        Resource = [aws_secretsmanager_secret.rds_password.arn]
+        Resource = [aws_secretsmanager_secret.rds_master_password.arn]
       }
     ]
   })
@@ -290,7 +290,7 @@ resource "aws_iam_policy" "rotation_lambda" {
           "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue",
           "secretsmanager:PutSecretValue", "secretsmanager:UpdateSecretVersionStage"
         ]
-        Resource = [aws_secretsmanager_secret.rds_password.arn]
+        Resource = [aws_secretsmanager_secret.rds_master_password.arn]
       },
       {
         Sid    = "RdsSetPassword"

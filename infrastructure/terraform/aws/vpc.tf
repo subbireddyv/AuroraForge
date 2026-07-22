@@ -153,4 +153,11 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
 
 locals {
   eks_cluster_name = "${var.project_name}-eks-${var.environment}"
+
+  # Common tags applied across IAM, monitoring and SNS resources
+  common_tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }

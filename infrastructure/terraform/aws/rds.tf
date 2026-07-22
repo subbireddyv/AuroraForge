@@ -109,14 +109,18 @@ resource "aws_secretsmanager_secret" "rds_master_password" {
   tags = { Name = "${var.project_name}-rds-master-secret" }
 }
 
-resource "aws_secretsmanager_secret_rotation" "rds_master_password" {
-  secret_id           = aws_secretsmanager_secret.rds_master_password.id
-  rotation_lambda_arn = aws_lambda_function.rds_password_rotator.arn  # defined in iam.tf
-
-  rotation_rules {
-    automatically_after_days = 90
-  }
-}
+# TODO: re-enable once the rds_password_rotator Lambda is implemented.
+# The rotation Lambda (aws_lambda_function.rds_password_rotator) is not yet
+# defined anywhere, so this resource referenced an undeclared resource and
+# failed terraform validate.
+# resource "aws_secretsmanager_secret_rotation" "rds_master_password" {
+#   secret_id           = aws_secretsmanager_secret.rds_master_password.id
+#   rotation_lambda_arn = aws_lambda_function.rds_password_rotator.arn
+#
+#   rotation_rules {
+#     automatically_after_days = 90
+#   }
+# }
 
 resource "random_password" "rds_master" {
   length           = 32

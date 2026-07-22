@@ -41,8 +41,8 @@ locals {
     sync         = { retention = 90,  path = "/auroraforge/sync" }
     keymgmt      = { retention = 365, path = "/auroraforge/keymgmt" }
     audit        = { retention = 365, path = "/auroraforge/audit" }
-    eks_control  = { retention = 90,  path = "/aws/eks/${var.cluster_name}/cluster" }
-    rds          = { retention = 90,  path = "/aws/rds/instance/${var.cluster_name}-rds/postgresql" }
+    eks_control  = { retention = 90,  path = "/aws/eks/${local.eks_cluster_name}/cluster" }
+    rds          = { retention = 90,  path = "/aws/rds/instance/${local.eks_cluster_name}-rds/postgresql" }
   }
 }
 
@@ -145,7 +145,7 @@ resource "aws_cloudwatch_metric_alarm" "eks_node_cpu" {
   treat_missing_data  = "notBreaching"
 
   dimensions = {
-    ClusterName = var.cluster_name
+    ClusterName = local.eks_cluster_name
   }
 }
 
