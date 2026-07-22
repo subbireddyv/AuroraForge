@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
@@ -38,6 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(controllers = AuthController.class)
 @Import({AuroraForgeSecurityConfig.class})
+// Binds SecurityProperties from (empty) test properties - record defaults kick in.
+@EnableConfigurationProperties(io.auroraforge.auth.infrastructure.config.SecurityProperties.class)
 @DisplayName("AuthController")
 class AuthControllerTest {
 
