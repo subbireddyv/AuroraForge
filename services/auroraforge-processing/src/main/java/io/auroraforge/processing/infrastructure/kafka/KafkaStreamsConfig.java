@@ -31,32 +31,33 @@ public class KafkaStreamsConfig {
 
     @Bean(name = KafkaStreamsDefaultConfiguration.DEFAULT_STREAMS_CONFIG_BEAN_NAME)
     public KafkaStreamsConfiguration kafkaStreamsConfig() {
-        return new KafkaStreamsConfiguration(Map.of(
-                StreamsConfig.APPLICATION_ID_CONFIG,        "auroraforge-processing-streams",
-                StreamsConfig.BOOTSTRAP_SERVERS_CONFIG,     bootstrapServers,
-                StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG,   Serdes.String().getClass(),
-                StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.ByteArray().getClass(),
+        // Map.of(...) is limited to 10 key/value pairs - use Map.ofEntries instead.
+        return new KafkaStreamsConfiguration(Map.ofEntries(
+                Map.entry(StreamsConfig.APPLICATION_ID_CONFIG,        "auroraforge-processing-streams"),
+                Map.entry(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG,     bootstrapServers),
+                Map.entry(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG,   Serdes.String().getClass()),
+                Map.entry(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.ByteArray().getClass()),
 
                 // Exactly-once processing (requires Kafka broker >= 2.5)
-                StreamsConfig.PROCESSING_GUARANTEE_CONFIG,  StreamsConfig.EXACTLY_ONCE_V2,
+                Map.entry(StreamsConfig.PROCESSING_GUARANTEE_CONFIG,  StreamsConfig.EXACTLY_ONCE_V2),
 
                 // State store
-                StreamsConfig.REPLICATION_FACTOR_CONFIG,    3,
-                StreamsConfig.COMMIT_INTERVAL_MS_CONFIG,    100L,
+                Map.entry(StreamsConfig.REPLICATION_FACTOR_CONFIG,    3),
+                Map.entry(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG,    100L),
 
                 // Consumer tuning
-                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,    "earliest",
-                ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG,   30000,
-                ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 3000,
+                Map.entry(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,    "earliest"),
+                Map.entry(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG,   30000),
+                Map.entry(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 3000),
 
                 // Schema Registry
-                AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl,
+                Map.entry(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl),
 
                 // Thread count: one per Kafka partition for parallelism
-                StreamsConfig.NUM_STREAM_THREADS_CONFIG,    4,
+                Map.entry(StreamsConfig.NUM_STREAM_THREADS_CONFIG,    4),
 
                 // Enable RocksDB metrics export
-                StreamsConfig.METRICS_RECORDING_LEVEL_CONFIG, "DEBUG"
+                Map.entry(StreamsConfig.METRICS_RECORDING_LEVEL_CONFIG, "DEBUG")
         ));
     }
 }
