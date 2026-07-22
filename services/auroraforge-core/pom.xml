@@ -71,6 +71,20 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Security (TenantPrincipal extends JwtAuthenticationToken) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+        </dependency>
+
         <!-- Test only -->
         <dependency>
             <groupId>org.assertj</groupId>
