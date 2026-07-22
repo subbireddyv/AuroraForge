@@ -66,6 +66,22 @@
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Spring Security core (AuditLogAspect reads SecurityContextHolder) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+        <!-- B3 propagator used in OpenTelemetryConfig (version from opentelemetry-bom) -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-extension-trace-propagators</artifactId>
+        </dependency>
+        <!-- Semantic conventions (ResourceAttributes) - separate artifact since OTel 1.30 -->
+        <dependency>
+            <groupId>io.opentelemetry.semconv</groupId>
+            <artifactId>opentelemetry-semconv</artifactId>
+            <version>1.23.1-alpha</version>
+        </dependency>
         <!-- Structured JSON logging (logstash-logback-encoder) -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
