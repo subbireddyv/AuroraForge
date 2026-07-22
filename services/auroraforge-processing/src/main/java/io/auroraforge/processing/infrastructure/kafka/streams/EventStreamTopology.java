@@ -203,8 +203,8 @@ public class EventStreamTopology {
                 .aggregate(
                         () -> WindowedAggregation.newBuilder()
                                 .setTenantId("")
-                                .setWindowStart(0L)
-                                .setWindowEnd(0L)
+                                .setWindowStart(Instant.EPOCH)
+                                .setWindowEnd(Instant.EPOCH)
                                 .setWindowDurationMs(Duration.ofMinutes(5).toMillis())
                                 .setTotalEventCount(0L)
                                 .setCountByClassification(new java.util.HashMap<>())
@@ -219,9 +219,8 @@ public class EventStreamTopology {
                         (tenantId, event, agg) -> {
                             agg.setTenantId(tenantId);
                             agg.setWindowStart(Instant.now()
-                                    .minusMillis(Duration.ofMinutes(5).toMillis())
-                                    .toEpochMilli());
-                            agg.setWindowEnd(Instant.now().toEpochMilli());
+                                    .minusMillis(Duration.ofMinutes(5).toMillis()));
+                            agg.setWindowEnd(Instant.now());
                             agg.setTotalEventCount(agg.getTotalEventCount() + 1);
                             agg.setTotalPayloadBytes(
                                     agg.getTotalPayloadBytes() + event.getPayloadSizeBytes());
