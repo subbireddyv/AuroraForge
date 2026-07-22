@@ -10,6 +10,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.authentication.BadCredentialsException;
 
 import java.security.KeyPair;
@@ -30,6 +32,9 @@ import static org.mockito.Mockito.*;
  * Redis blacklist is mocked to control revocation behaviour.
  */
 @ExtendWith(MockitoExtension.class)
+// Shared setUp() stubs are not exercised by every test method (e.g. malformed-token
+// tests never touch the key provider) - lenient avoids UnnecessaryStubbingException.
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("JwtTokenProvider")
 class JwtTokenProviderTest {
 
