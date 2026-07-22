@@ -102,10 +102,17 @@ public class IngestEventService implements IngestEventUseCase {
     }
 
     /** Puts per-request context into MDC for structured logging correlation. */
-    private AutoCloseable setupMdc(IngestEventCommand command) {
+    private MdcScope setupMdc(IngestEventCommand command) {
         MDC.put("tenantId",    command.tenantId());
         MDC.put("schemaName",  command.schemaName());
         MDC.put("sourceSystem", command.sourceSystem());
         return MDC::clear;
+    }
+
+    /** AutoCloseable whose close() does not throw, so try-with-resources needs no catch. */
+    @FunctionalInterface
+    private interface MdcScope extends AutoCloseable {
+        @Override
+        void close();
     }
 }
