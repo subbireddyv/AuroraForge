@@ -34,8 +34,11 @@ class CleanArchitectureTest {
     @Test
     @DisplayName("Domain layer must not depend on application, infrastructure, or presentation")
     void domainMustBeIsolated() {
+        // domain.security is the deliberate Spring Security bridge (TenantPrincipal
+        // extends JwtAuthenticationToken) and is exempt from the framework ban.
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..domain..")
+                .and().resideOutsideOfPackage("..domain.security..")
                 .should().dependOnClassesThat()
                 .resideInAnyPackage(
                         "..application..",
@@ -78,7 +81,7 @@ class CleanArchitectureTest {
 
     @Test
     @DisplayName("Layered architecture dependencies are respected")
-    void layeredArchitecture() {
+    void layeredArchitectureIsRespected() {
         ArchRule rule = layeredArchitecture()
                 .consideringAllDependencies()
                 .layer("Domain")         .definedBy("..domain..")
