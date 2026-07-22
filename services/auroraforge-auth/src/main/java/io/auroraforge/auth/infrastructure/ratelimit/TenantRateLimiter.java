@@ -1,7 +1,7 @@
 package io.auroraforge.auth.infrastructure.ratelimit;
 
-import com.bucket4j.Bandwidth;
-import com.bucket4j.Bucket;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
 import io.auroraforge.auth.infrastructure.config.SecurityProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
