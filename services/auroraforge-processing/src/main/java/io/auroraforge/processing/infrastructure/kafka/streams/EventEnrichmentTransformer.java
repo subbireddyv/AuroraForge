@@ -68,7 +68,7 @@ public class EventEnrichmentTransformer implements Transformer<String, DataEvent
         enrichedMetadata.put("enricher.path", path.name());
         enrichedMetadata.put("enricher.window.count", String.valueOf(newCount));
 
-        long enrichedAt = Instant.now().toEpochMilli();
+        Instant enrichedAt = Instant.now();
         long latencyMs  = (System.nanoTime() - startNs) / 1_000_000L;
 
         DataEventEnriched enriched = DataEventEnriched.newBuilder()

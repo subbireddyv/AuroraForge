@@ -8,9 +8,12 @@ import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.WindowStore;
 import org.apache.kafka.streams.state.Stores;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -211,7 +214,7 @@ public class EventStreamTopology {
                                 .setDlqCount(0L)
                                 .setP50LatencyMs(null)
                                 .setP99LatencyMs(null)
-                                .setComputedAt(Instant.now().toEpochMilli())
+                                .setComputedAt(Instant.now())
                                 .build(),
                         (tenantId, event, agg) -> {
                             agg.setTenantId(tenantId);
@@ -233,12 +236,12 @@ public class EventStreamTopology {
                             if (event.getAnomalyDetected()) {
                                 agg.setAnomalyCount(agg.getAnomalyCount() + 1);
                             }
-                            agg.setComputedAt(Instant.now().toEpochMilli());
+                            agg.setComputedAt(Instant.now());
                             return agg;
                         },
                         Named.as("aggregate-window"),
                         Materialized.<String, WindowedAggregation,
-                                KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>
+                                WindowStore<org.apache.kafka.common.utils.Bytes, byte[]>>
                                 as("windowed-aggregation-store")
                                 .withKeySerde(Serdes.String())
                                 .withValueSerde(aggSerde))
@@ -263,7 +266,7 @@ public class EventStreamTopology {
                 .setPayloadSizeBytes(event.getPayloadSizeBytes())
                 .setCreatedAt(event.getCreatedAt())
                 .setMetadata(new java.util.HashMap<>(event.getMetadata()))
-                .setEnrichedAt(Instant.now().toEpochMilli())
+                .setEnrichedAt(Instant.now())
                 .setProcessorId(appId)
                 .setWindowedEventCount(0L)
                 .setAnomalyScore(0.0)
