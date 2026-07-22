@@ -15,6 +15,11 @@
 -->
 <included>
 
+    <!-- Register Spring Boot's %clr color converter (not available by default
+         outside Spring Boot's own base.xml include) -->
+    <conversionRule conversionWord="clr"
+                    converterClass="org.springframework.boot.logging.logback.ColorConverter"/>
+
     <!-- ═══════════════════════════════════════════════════════
          PROPERTIES
          ═══════════════════════════════════════════════════════ -->
