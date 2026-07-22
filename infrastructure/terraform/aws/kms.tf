@@ -29,7 +29,9 @@ resource "aws_kms_key" "app_data" {
         Sid    = "AllowEKSServiceAccountUsage"
         Effect = "Allow"
         Principal = {
-          AWS = aws_iam_role.app_kms_role.arn
+          # Constructed ARN (not a resource reference): app_kms_role depends on
+          # module.eks which depends on this key - a reference would create a cycle.
+          AWS = "arn:aws:iam::${var.aws_account_id}:role/${var.project_name}-app-kms-role"
         }
         Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
         Resource = "*"
