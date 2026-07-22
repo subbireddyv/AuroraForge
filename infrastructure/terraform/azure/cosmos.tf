@@ -141,8 +141,10 @@ resource "azurerm_cosmosdb_sql_container" "aggregates" {
 
   # Custom conflict resolution: resolved by ConflictResolverService via stored procedure
   conflict_resolution_policy {
-    mode                             = "Custom"
-    conflict_resolution_procedure = azurerm_cosmosdb_sql_stored_procedure.conflict_resolver.name
+    mode = "Custom"
+    # Literal path (not a resource reference): the stored procedure resource below
+    # references this container, so referencing it here would create a dependency cycle.
+    conflict_resolution_procedure = "dbs/auroraforge/colls/aggregates/sprocs/resolveConflict"
   }
 
   unique_key {
