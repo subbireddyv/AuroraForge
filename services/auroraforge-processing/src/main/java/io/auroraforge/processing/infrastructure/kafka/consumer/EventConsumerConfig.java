@@ -5,6 +5,7 @@ import io.auroraforge.avro.WindowedAggregation;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -55,9 +56,12 @@ public class EventConsumerConfig {
         props.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500);
         // Use SpecificAvroDeserializer so Avro schema is bound to DataEventEnriched.class
         props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG, true);
+        @SuppressWarnings("unchecked")
+        Deserializer<DataEventEnriched> valueDeserializer =
+                (Deserializer<DataEventEnriched>) (Deserializer<?>) new KafkaAvroDeserializer();
         return new DefaultKafkaConsumerFactory<>(props,
                 new StringDeserializer(),
-                new KafkaAvroDeserializer());
+                valueDeserializer);
     }
 
     @Bean("enrichedListenerContainerFactory")
