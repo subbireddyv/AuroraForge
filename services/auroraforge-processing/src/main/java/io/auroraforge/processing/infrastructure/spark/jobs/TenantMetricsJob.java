@@ -80,7 +80,7 @@ public class TenantMetricsJob {
         Dataset<Row> dominantClass = eventCounts
                 .withColumn("classRank", rank().over(classRankWindow))
                 .filter(col("classRank").equalTo(1))
-                .select("tenantId", col("classification").alias("dominantClassification"));
+                .select(col("tenantId"), col("classification").alias("dominantClassification"));
 
         Dataset<Row> tenantMetrics = withLatency
                 .join(dominantClass, "tenantId", "left")
