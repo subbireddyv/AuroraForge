@@ -2,6 +2,7 @@ package io.auroraforge.processing.infrastructure.spark.jobs;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.expressions.WindowSpec;
 import org.apache.spark.sql.streaming.StreamingQueryException;
 import org.apache.spark.sql.types.DataTypes;
 
