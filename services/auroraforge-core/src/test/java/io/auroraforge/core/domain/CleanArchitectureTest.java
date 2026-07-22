@@ -72,10 +72,13 @@ class CleanArchitectureTest {
     @Test
     @DisplayName("Infrastructure must not depend on presentation")
     void infrastructureMustNotDependOnPresentation() {
+        // allowEmptyShould: the core module contains no infrastructure classes;
+        // the rule still guards service modules that import this test convention.
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..infrastructure..")
                 .should().dependOnClassesThat()
-                .resideInAPackage("..presentation..");
+                .resideInAPackage("..presentation..")
+                .allowEmptyShould(true);
         rule.check(classes);
     }
 
@@ -84,6 +87,7 @@ class CleanArchitectureTest {
     void layeredArchitectureIsRespected() {
         ArchRule rule = layeredArchitecture()
                 .consideringAllDependencies()
+                .withOptionalLayers(true)  // core has no infrastructure/presentation classes
                 .layer("Domain")         .definedBy("..domain..")
                 .layer("Application")    .definedBy("..application..")
                 .layer("Infrastructure") .definedBy("..infrastructure..")
@@ -112,7 +116,8 @@ class CleanArchitectureTest {
     void domainEntitiesMustNotHaveJpaAnnotations() {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..domain.model..")
-                .should().beAnnotatedWith(jakarta.persistence.Entity.class);
+                .should().beAnnotatedWith(jakarta.persistence.Entity.class)
+                .allowEmptyShould(true);
         rule.check(classes);
     }
 
@@ -139,7 +144,8 @@ class CleanArchitectureTest {
     void jpaEntitiesInCorrectPackage() {
         ArchRule rule = classes()
                 .that().areAnnotatedWith(jakarta.persistence.Entity.class)
-                .should().resideInAPackage("..infrastructure.persistence.entity..");
+                .should().resideInAPackage("..infrastructure.persistence.entity..")
+                .allowEmptyShould(true);  // no JPA entities in the core module
         rule.check(classes);
     }
 
@@ -149,7 +155,8 @@ class CleanArchitectureTest {
         ArchRule rule = classes()
                 .that().areAnnotatedWith(
                         org.springframework.web.bind.annotation.RestController.class)
-                .should().resideInAPackage("..presentation.rest..");
+                .should().resideInAPackage("..presentation.rest..")
+                .allowEmptyShould(true);  // no controllers in the core module
         rule.check(classes);
     }
 }
