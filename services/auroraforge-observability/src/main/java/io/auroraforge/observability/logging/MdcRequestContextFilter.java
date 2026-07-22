@@ -61,8 +61,8 @@ public class MdcRequestContextFilter extends OncePerRequestFilter {
 
             // OTel bridge writes traceId/spanId automatically when a span is active.
             // Set fallback values so JSON fields are never absent (Elasticsearch mapping stability).
-            MDC.putIfAbsent(MDC_TRACE_ID, "0000000000000000");
-            MDC.putIfAbsent(MDC_SPAN_ID,  "0000000000000000");
+            putIfAbsent(MDC_TRACE_ID, "0000000000000000");
+            putIfAbsent(MDC_SPAN_ID,  "0000000000000000");
 
             // Echo the resolved request-id back so callers can correlate with logs
             response.setHeader(REQUEST_ID_HEADER, requestId);
@@ -102,5 +102,12 @@ public class MdcRequestContextFilter extends OncePerRequestFilter {
 
     private String nullToEmpty(String value) {
         return (value != null) ? value : "–";
+    }
+
+    /** SLF4J's MDC has no putIfAbsent; emulate it (single-threaded per request, safe). */
+    private static void putIfAbsent(String key, String value) {
+        if (MDC.get(key) == null) {
+            MDC.put(key, value);
+        }
     }
 }
