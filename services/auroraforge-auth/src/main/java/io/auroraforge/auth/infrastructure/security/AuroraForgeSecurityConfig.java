@@ -44,8 +44,8 @@ import java.util.List;
  *   GET    /.well-known/jwks.json           → permitAll
  *   GET    /actuator/health, /actuator/info → permitAll
  *   GET    /actuator/**                     → PLATFORM_OPS
- *   POST   /api/v1/tenants/*/events         → DATA_INGEST + tenant-match
- *   GET    /api/v1/tenants/*/events/**      → DATA_QUERY or ADMIN + tenant-match
+ *   POST   /api/v1/tenants/{id}/events      → DATA_INGEST + tenant-match
+ *   GET    /api/v1/tenants/{id}/events/**   → DATA_QUERY or ADMIN + tenant-match
  *   POST   /api/v1/keys/rotate/**           → KEY_MANAGER or ADMIN
  *   GET    /api/v1/keys/**                  → KEY_MANAGER or ADMIN
  *   /**    /api/v1/dr/**                    → PLATFORM_OPS or ADMIN
